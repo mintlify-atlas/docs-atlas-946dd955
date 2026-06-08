@@ -1,7 +1,7 @@
 ---
-title: "GET /api/v1/admin/productos — List All Products"
+title: "GET /api/v1/admin/productos — List All Admin Products"
 sidebarTitle: "List Products"
-description: "GET /api/v1/admin/productos — Returns all products from the catalog view, including images, variants, stock totals, and color hex codes, ordered by most recent."
+description: "GET /api/v1/admin/productos — Returns all products from the catalog view with images, variants, stock totals, and color hex codes, ordered by ID DESC."
 ---
 
 This endpoint queries the `vista_catalogo_productos` database view and returns every product in the catalog, ordered from newest to oldest by ID. Each object in the response array is a fully denormalized product record that includes the category name, the principal image URL, a summed stock total, a per-size stock breakdown, all hex color codes, the full image list with ordering, variant foreign-key ID arrays, and the complete variant matrix. No query parameters are required or supported.

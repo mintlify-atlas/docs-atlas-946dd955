@@ -18,9 +18,6 @@ Use a consistent prefix so it is immediately obvious what kind of work a branch 
 |---|---|---|
 | `feature/` | Adding new functionality | `feature/endpoint-colores` |
 | `fix/` | Correcting a bug or broken behaviour | `fix/error-subida-imagen` |
-| `docs/` | Documentation-only changes | `docs/guia-instalacion` |
-| `chore/` | Configuration, tooling, or dependency updates | `chore/actualizar-express` |
-| `refactor/` | Internal restructuring with no behaviour change | `refactor/modelo-productos` |
 
 Branch names should be lowercase, use hyphens instead of spaces, and be descriptive enough that a teammate understands the purpose at a glance.
 
@@ -96,23 +93,18 @@ Branch names should be lowercase, use hyphens instead of spaces, and be descript
 
 ## Commit message format
 
-Balsamoa Backend uses [Conventional Commits](https://www.conventionalcommits.org/). The format is:
+Write short, clear, and descriptive commit messages. The project uses a simple `type: description` format:
 
 ```
 <type>: short description in lowercase
 ```
 
-The description should be written in the imperative mood and finish without a period. Keep it under 72 characters.
-
 | Prefix | Purpose | Example for this project |
 |---|---|---|
 | `feat:` | A new feature or endpoint | `feat: agregar ruta GET /api/v1/tienda/colores` |
 | `fix:` | A bug fix | `fix: corregir query de productos inactivos` |
-| `docs:` | Documentation changes only | `docs: actualizar .env.example con instrucciones` |
-| `chore:` | Tooling, config, or dependency updates | `chore: agregar nodemon a devDependencies` |
-| `refactor:` | Code restructuring without behaviour change | `refactor: extraer lógica de paginación al modelo` |
 
-A well-written commit history makes it easy to understand what the project looked like at any point in time and to pinpoint exactly when a bug was introduced.
+Keep descriptions brief and in the imperative mood. A clear commit history makes it easy to understand what changed and why at any point in time.
 
 ## Resolving merge conflicts
 

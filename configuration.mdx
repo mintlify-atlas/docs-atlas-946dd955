@@ -1,7 +1,7 @@
 ---
 title: "Configure Balsamoa Backend with Environment Variables"
 sidebarTitle: "Configuration"
-description: "All configuration for Balsamoa Backend is done through environment variables. Learn what each variable does and how to set it up for development and production."
+description: "Balsamoa Backend reads DATABASE_URL and PUERTO from a .env file. Learn what each variable does and how to configure them for development and production."
 ---
 
 Balsamoa Backend is configured entirely through environment variables loaded at startup by `dotenv`. There are only two variables to set — a database connection string and an optional HTTP port — making the configuration surface intentionally minimal. The template file `inicializar/.env.example` documents all available variables and ships with the repository.
@@ -33,12 +33,25 @@ PUERTO=3003
 </ParamField>
 
 <ParamField path="PUERTO" type="number" default="3000">
-  The TCP port that the Express HTTP server binds to when it starts. If this variable is not set or is left empty, the server defaults to port **3000**.
+  The TCP port that the Express HTTP server binds to when it starts. If this variable is not set or is left empty, the server code defaults to port **3000**. The provided `.env.example` sets this to **3003** — use that value in development to match the configured default.
 
   ```javascript src/server.mjs
   const PUERTO = process.env.PUERTO || 3000
   ```
 </ParamField>
+
+## SSL configuration
+
+The database connection pool in `src/config/conexion.bd.mjs` enforces SSL for all connections to Supabase with `rejectUnauthorized` set to `false`. This allows the Node.js `pg` driver to connect to Supabase's hosted PostgreSQL without requiring a client-side CA certificate.
+
+```javascript src/config/conexion.bd.mjs
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+})
+```
 
 ## Supabase connection string
 
@@ -66,8 +79,8 @@ Finding the right connection string in the Supabase dashboard takes a few steps.
     # Supabase pooler URL — port 6543 required
     DATABASE_URL=postgresql://postgres.abcdefghijklmnop:your-dev-password@aws-0-us-east-1.pooler.supabase.com:6543/postgres
 
-    # Local dev port
-    PUERTO=3000
+    # Local dev port — matches .env.example default
+    PUERTO=3003
     ```
 
     Start the server with:

@@ -1,5 +1,5 @@
 ---
-title: "Database Schema: Tables, Views, and Relationships"
+title: "Balsamoa Database Schema: Tables, Views, and Relationships"
 sidebarTitle: "Database Schema"
 description: "Complete reference for the Balsamoa PostgreSQL schema — products, variants, images, categories, sizes, colors, orders, and the catalog view."
 ---
@@ -165,6 +165,24 @@ SELECT
         FROM producto_imagenes pi
         WHERE pi.producto_id = p.id
     ) AS imagenes,
+    -- IDs de talles con variantes [1, 2, 3]
+    (
+        SELECT COALESCE(
+            json_agg(DISTINCT v.talle_id ORDER BY v.talle_id),
+            '[]'::json
+        )
+        FROM variantes v
+        WHERE v.producto_id = p.id
+    ) AS talle_ids,
+    -- IDs de colores con variantes [1, 2]
+    (
+        SELECT COALESCE(
+            json_agg(DISTINCT v.color_id ORDER BY v.color_id),
+            '[]'::json
+        )
+        FROM variantes v
+        WHERE v.producto_id = p.id
+    ) AS color_ids,
     -- Full variant list: [{talle_id, color_id, stock, activo}, ...]
     (
         SELECT COALESCE(

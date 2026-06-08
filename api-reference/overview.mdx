@@ -1,5 +1,5 @@
 ---
-title: "Balsamoa API Reference: REST Endpoints Overview"
+title: "Balsamoa Backend API Reference: Endpoints Overview"
 sidebarTitle: "Overview"
 description: "All Balsamoa Backend REST endpoints at a glance — admin product CRUD, image management, catalog lookups, and the public store API. Base path: /api/v1/."
 ---
@@ -13,10 +13,6 @@ All requests are relative to the server root. No additional base path configurat
 ```
 /api/v1/
 ```
-
-## Authentication
-
-No token-based authentication is currently implemented. Admin endpoints are accessible to any client that can reach the server. Before deploying to production, restrict all traffic to `/api/v1/admin/*` at the reverse-proxy (e.g. Nginx or Caddy) or Express middleware level — for example by checking a shared secret header or by placing the admin panel behind a VPN.
 
 ## Content Type
 

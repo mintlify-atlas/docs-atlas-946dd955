@@ -1,5 +1,5 @@
 ---
-title: "Get Started with Balsamoa Backend in 5 Minutes"
+title: "Quickstart: Run Balsamoa Backend Locally in 5 Minutes"
 sidebarTitle: "Quickstart"
 description: "Clone the Balsamoa Backend, set up your Supabase database, configure environment variables, and run the development server in five minutes."
 ---
@@ -59,7 +59,7 @@ This guide walks you through getting a fully functional local instance of Balsam
     DATABASE_URL=postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 
     # HTTP port the server listens on (defaults to 3000 if omitted)
-    PUERTO=3000
+    PUERTO=3003
     ```
 
     <Tip>
@@ -70,7 +70,7 @@ This guide walks you through getting a fully functional local instance of Balsam
   <Step title="Initialize the database">
     The file `inicializar/balsamoa.sql` contains the complete schema (tables, views, sequences) and seed data. You need to run it once against your Supabase database.
 
-    **Option A — Supabase SQL Editor (recommended for beginners):**
+    **Option A — Supabase SQL Editor (recommended):**
 
     1. Open your Supabase project dashboard.
     2. Navigate to **SQL Editor** in the left sidebar.
@@ -108,8 +108,8 @@ This guide walks you through getting a fully functional local instance of Balsam
     On a successful start you will see:
 
     ```
-    Servidor corriendo en http://localhost:3000
-    Panel de Admin http://localhost:3000/admin
+    Servidor corriendo en http://localhost:3003
+    Panel de Admin http://localhost:3003/admin
     ```
   </Step>
 
@@ -118,16 +118,16 @@ This guide walks you through getting a fully functional local instance of Balsam
 
     ```bash
     # List all public products
-    curl http://localhost:3000/api/v1/tienda/productos
+    curl http://localhost:3003/api/v1/tienda/productos
 
     # Fetch a single product by ID
-    curl http://localhost:3000/api/v1/tienda/productos/1
+    curl http://localhost:3003/api/v1/tienda/productos/1
     ```
 
     You should receive a JSON array of products with their variants, images, and stock data. Then open the admin panel in your browser:
 
     ```
-    http://localhost:3000/admin
+    http://localhost:3003/admin
     ```
 
     The admin dashboard should load, allowing you to create, edit, and manage products and inventory.

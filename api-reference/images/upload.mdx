@@ -1,7 +1,7 @@
 ---
-title: "POST /api/v1/admin/imagenes/subir — Upload a Product Image"
+title: "POST /api/v1/admin/imagenes/subir — Upload Product Image"
 sidebarTitle: "Upload Image"
-description: "POST /api/v1/admin/imagenes/subir — Accepts a multipart/form-data file upload (max 5 MB, JPEG/PNG/WebP/GIF) and returns the public URL path for use in product creation."
+description: "POST /api/v1/admin/imagenes/subir — Upload an image file (max 5 MB, JPEG/PNG/WebP/GIF) and receive the public URL path to use in product creation."
 ---
 
 Images must be uploaded to the server before they can be associated with a product. This endpoint accepts a single file via `multipart/form-data`, saves it to disk, and returns a public URL path. That URL is then passed inside the `imagenes` array when calling the create or update product endpoints.
@@ -23,8 +23,8 @@ Images must be uploaded to the server before they can be associated with a produ
 ### Constraints
 
 - **Maximum file size:** 5 MB. Requests exceeding this limit are rejected with a `400` error.
-- **Accepted MIME types:** `image/jpeg`, `image/png`, `image/webp`, `image/gif`. Any other type is rejected with `TIPO_INVALIDO`.
-- **Storage location:** Files are saved to the server's local filesystem under `/recursos/imagenes/productos/`.
+- **Accepted MIME types:** `image/jpeg`, `image/png`, `image/webp`, `image/gif`. Any other MIME type is rejected with a `400` error.
+- **Storage location:** Files are saved to the server's local filesystem under `/src/public/recursos/imagenes/productos/`.
 - **Filename sanitization:** Spaces in the original filename are replaced with underscores (`_`), and a Unix millisecond timestamp is prepended (e.g., `1700000000000_remera_blanca.webp`).
 
 ### Example
@@ -67,7 +67,7 @@ curl -X POST https://your-api.com/api/v1/admin/imagenes/subir \
 | `400`  | No file field received in the request                           | `{"mensaje": "No se recibió ningún archivo"}`          |
 
 <Warning>
-  **Ephemeral disk on Vercel.** This endpoint writes files to the local filesystem (`/public/recursos/imagenes/productos/`). Vercel's serverless runtime uses an ephemeral filesystem — files written during one request are not guaranteed to persist across function invocations or deployments. For production use, replace the Multer disk storage configuration with a cloud storage provider such as Cloudinary, AWS S3, or Supabase Storage, and store the resulting CDN URL instead.
+  **Ephemeral disk on Vercel.** This endpoint writes files to the local filesystem (`/src/public/recursos/imagenes/productos/`). Vercel's serverless runtime uses an ephemeral filesystem — files written during one request are not guaranteed to persist across function invocations or deployments. For production use, replace the Multer disk storage configuration with a cloud storage provider such as Cloudinary, AWS S3, or Supabase Storage, and store the resulting CDN URL instead.
 </Warning>
 
 ## Typical Workflow
