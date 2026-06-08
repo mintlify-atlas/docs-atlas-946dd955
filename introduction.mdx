@@ -1,0 +1,91 @@
+---
+title: "Balsamoa Backend: Express API for Clothing Store Management"
+sidebarTitle: "Introduction"
+description: "Balsamoa Backend is a Node.js/Express REST API that powers the Balsamoa clothing store with product catalog management, inventory variants, image uploads, and an admin panel."
+---
+
+Balsamoa Backend is a Node.js REST API built with Express 5 that serves as the complete backend for the Balsamoa clothing store. It manages a product catalog with size and color variant inventory, handles image uploads through Multer, and exposes two distinct API surfaces: a public read-only store API for the storefront and a full CRUD admin API for the management panel. The database layer runs on PostgreSQL hosted by Supabase, accessed through a connection pool managed by the `pg` driver.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Full CRUD for products" icon="box">
+    Create, read, update, and delete products through the admin API at `/api/v1/admin/productos`. Includes logical activation and deactivation so products can be hidden without permanent deletion.
+  </Card>
+  <Card title="Size and color variant inventory" icon="swatchbook">
+    Every product supports granular stock tracking per size (`talles`) and color (`colores`) combination via the `variantes` table, with a pre-loaded catalog of 5 sizes and 8 colors.
+  </Card>
+  <Card title="Image upload via Multer" icon="image">
+    Upload product images directly to the server's public folder through `POST /api/v1/admin/imagenes/subir`. Images are served as static assets under `/recursos` and can be removed via `DELETE /api/v1/admin/imagenes/:id`.
+  </Card>
+  <Card title="Public store API with censored stock" icon="store">
+    The tienda routes at `/api/v1/tienda/productos` expose product data suitable for the storefront — full catalog details including variant availability — without surfacing raw admin fields.
+  </Card>
+  <Card title="Admin panel at /admin" icon="gauge">
+    A static HTML admin panel is served directly by Express at the `/admin` route, allowing store managers to browse products, create new entries, and manage inventory from a web UI with no separate frontend server required.
+  </Card>
+  <Card title="PostgreSQL via Supabase connection pool" icon="database">
+    Database connections are managed through a `pg.Pool` with SSL enforced, pointing at Supabase's transaction pooler on port 6543 for reliable serverless-compatible connections.
+  </Card>
+</CardGroup>
+
+## Tech stack
+
+| Technology | Role |
+|---|---|
+| **Node.js** (ES Modules) | Runtime; all source files use `.mjs` extensions and native `import`/`export` syntax |
+| **Express 5** | HTTP framework for routing, middleware, and static file serving |
+| **PostgreSQL via `pg` driver** | Relational database access with a `Pool` for connection reuse |
+| **Supabase** | Hosted PostgreSQL database with a pooler endpoint for production connections |
+| **Multer** | Multipart form-data middleware for handling product image uploads |
+| **dotenv** | Loads `DATABASE_URL` and `PUERTO` from a `.env` file into `process.env` |
+| **nodemon** | Development-time file watcher that restarts the server on source changes |
+
+## Project structure
+
+The repository follows a module-per-domain layout inside `src/modulos/`, keeping routes, controllers, and models co-located for each resource.
+
+```
+Balsamoa-Backend/
+├── inicializar/
+│   ├── .env.example          # Environment variable template
+│   └── balsamoa.sql          # Database schema + seed data
+├── src/
+│   ├── server.mjs            # Express app entry point
+│   ├── config/
+│   │   └── conexion.bd.mjs   # pg.Pool setup with SSL
+│   ├── modulos/
+│   │   ├── productos/
+│   │   │   ├── rutas.productos.mjs
+│   │   │   ├── controlador.productos.mjs
+│   │   │   └── modelo.productos.mjs
+│   │   ├── categorias/
+│   │   │   ├── rutas.categorias.mjs
+│   │   │   ├── controlador.categorias.mjs
+│   │   │   └── modelo.categorias.mjs
+│   │   ├── talles/
+│   │   │   ├── rutas.talles.mjs
+│   │   │   ├── controlador.talles.mjs
+│   │   │   └── modelo.talles.mjs
+│   │   └── colores/
+│   │       ├── rutas.colores.mjs
+│   │       ├── controlador.colores.mjs
+│   │       └── modelo.colores.mjs
+│   └── public/
+│       ├── admin/            # Static admin panel (index.html)
+│       ├── tienda/           # Static store frontend (HTML pages)
+│       └── recursos/         # Shared CSS, JS, fonts, and product images
+├── package.json
+├── pnpm-lock.yaml
+└── vercel.json
+```
+
+## API base URL
+
+<Note>
+  All API routes are versioned under the `/api/v1/` prefix. Admin routes live under `/api/v1/admin/` and public store routes under `/api/v1/tienda/`.
+
+  ```
+  http://localhost:3000/api/v1/
+  ```
+</Note>

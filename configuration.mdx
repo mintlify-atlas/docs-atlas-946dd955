@@ -1,0 +1,100 @@
+---
+title: "Configure Balsamoa Backend with Environment Variables"
+sidebarTitle: "Configuration"
+description: "All configuration for Balsamoa Backend is done through environment variables. Learn what each variable does and how to set it up for development and production."
+---
+
+Balsamoa Backend is configured entirely through environment variables loaded at startup by `dotenv`. There are only two variables to set — a database connection string and an optional HTTP port — making the configuration surface intentionally minimal. The template file `inicializar/.env.example` documents all available variables and ships with the repository.
+
+## Environment file template
+
+Copy this file to `.env` at the project root before starting the server for the first time.
+
+```bash inicializar/.env.example
+# Cambiar puerto 5432 a 6543
+DATABASE_URL=ingresar_url_de_supabase_aqui
+PUERTO=3003
+```
+
+<Warning>
+  **Never commit your `.env` file to version control.** It contains your database password in plain text. The `.gitignore` already excludes `.env` from commits — verify this before pushing to a shared repository.
+</Warning>
+
+## Variable reference
+
+<ParamField path="DATABASE_URL" type="string" required>
+  The PostgreSQL connection string used by `pg.Pool` to connect to your Supabase database. SSL is enabled automatically with `rejectUnauthorized: false` so no additional certificate configuration is required.
+
+  **You must use the Supabase transaction pooler URL** (port **6543**), not the direct connection URL (port 5432). The pooler is compatible with environments that open many short-lived connections, such as development workstations and serverless functions on Vercel.
+
+  ```
+  postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+  ```
+</ParamField>
+
+<ParamField path="PUERTO" type="number" default="3000">
+  The TCP port that the Express HTTP server binds to when it starts. If this variable is not set or is left empty, the server defaults to port **3000**.
+
+  ```javascript src/server.mjs
+  const PUERTO = process.env.PUERTO || 3000
+  ```
+</ParamField>
+
+## Supabase connection string
+
+Finding the right connection string in the Supabase dashboard takes a few steps. Make sure to select the **pooler** URL, not the direct URL.
+
+1. Open your project in the [Supabase dashboard](https://supabase.com/dashboard).
+2. Go to **Project Settings** (gear icon) → **Database**.
+3. Scroll down to the **Connection string** section.
+4. Select the **URI** format tab.
+5. In the **Connection mode** selector, choose **Transaction** (this gives you the pooler endpoint).
+6. Copy the connection string — it will have port **6543** in the URL.
+7. Replace the `[YOUR-PASSWORD]` placeholder with your actual database password.
+
+<Tip>
+  If the copied URL shows port **5432**, you are looking at the direct connection string. Change it to **6543** manually, or switch the **Connection mode** selector to **Transaction** and copy again.
+</Tip>
+
+## Development vs production
+
+<Tabs>
+  <Tab title="Development">
+    In development, `nodemon` watches for file changes and restarts the server automatically. Use a descriptive port to avoid conflicts with other local services and point `DATABASE_URL` at your Supabase development project or a local PostgreSQL instance.
+
+    ```bash .env (development)
+    # Supabase pooler URL — port 6543 required
+    DATABASE_URL=postgresql://postgres.abcdefghijklmnop:your-dev-password@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+
+    # Local dev port
+    PUERTO=3000
+    ```
+
+    Start the server with:
+
+    ```bash
+    pnpm dev
+    ```
+  </Tab>
+  <Tab title="Production">
+    In production, set environment variables through your hosting platform's secrets manager (e.g., Vercel environment variables, Railway variables, or a server-side `.env` file that is never committed). Use `pnpm start` to run Node directly without nodemon.
+
+    ```bash .env (production)
+    # Supabase pooler URL pointing at your production project
+    DATABASE_URL=postgresql://postgres.zyxwvutsrqponmlk:your-prod-password@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
+
+    # Standard HTTP port; set to 80 or let your platform inject PORT automatically
+    PUERTO=3000
+    ```
+
+    Start the server with:
+
+    ```bash
+    pnpm start
+    ```
+
+    <Tip>
+      On platforms like Vercel, the `PUERTO` variable is typically ignored because the platform injects its own `PORT` environment variable and manages incoming traffic. Ensure your server reads `process.env.PORT` if you need compatibility with those platforms.
+    </Tip>
+  </Tab>
+</Tabs>

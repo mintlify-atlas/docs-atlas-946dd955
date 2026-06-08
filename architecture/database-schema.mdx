@@ -1,0 +1,230 @@
+---
+title: "Database Schema: Tables, Views, and Relationships"
+sidebarTitle: "Database Schema"
+description: "Complete reference for the Balsamoa PostgreSQL schema — products, variants, images, categories, sizes, colors, orders, and the catalog view."
+---
+
+The Balsamoa database is a PostgreSQL schema hosted on Supabase. It is organized into four domains: the product catalog and its attributes, user accounts and shipping data, orders and payments, and two utility tables for the shopping cart and newsletter. All tables use `SERIAL PRIMARY KEY` for auto-incrementing IDs and timestamp defaults where relevant. The full schema is defined in `inicializar/balsamoa.sql` and can be applied to any fresh Supabase project to reproduce the exact structure, seed data, and sequence offsets.
+
+## Tables by domain
+
+<CardGroup cols={2}>
+  <Card title="Catalog & Attributes" icon="shirt">
+    `categorias`, `talles`, `colores`, `productos`, `producto_imagenes`, `variantes`
+  </Card>
+  <Card title="Users & Roles" icon="users">
+    `roles`, `usuarios`, `datos_envio`
+  </Card>
+  <Card title="Orders & Payments" icon="shopping-cart">
+    `estados_pedido`, `metodos_pago`, `pedidos`, `detalles_pedido`, `pagos`
+  </Card>
+  <Card title="Extras" icon="box">
+    `carrito_compra`, `newsletter_suscriptores`
+  </Card>
+</CardGroup>
+
+## Core catalog tables
+
+The six tables below form the heart of the product catalog. They are the ones queried by every public and admin API endpoint.
+
+### categorias
+
+```sql
+CREATE TABLE categorias (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT
+);
+```
+
+### talles
+
+```sql
+CREATE TABLE talles (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    orden INTEGER DEFAULT 0
+);
+```
+
+The `orden` column controls the display order of sizes in the admin panel and the catalog view — sizes are always sorted by `orden ASC`.
+
+### colores
+
+```sql
+CREATE TABLE colores (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    hex VARCHAR(7)
+);
+```
+
+The `hex` column stores the CSS hex color code (e.g. `#4A5D23`) so the storefront can render color swatches without additional lookups.
+
+### productos
+
+```sql
+CREATE TABLE productos (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    descripcion TEXT,
+    precio DECIMAL(10, 2) NOT NULL,
+    categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
+    destacado BOOLEAN DEFAULT false,
+    activo BOOLEAN DEFAULT true,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+The `destacado` flag marks a product for display on the store's featured section. The `activo` flag implements soft delete — deactivating a product hides it from the public API without removing any historical order data.
+
+### producto_imagenes
+
+```sql
+CREATE TABLE producto_imagenes (
+    id SERIAL PRIMARY KEY,
+    producto_id INTEGER REFERENCES productos(id) ON DELETE CASCADE,
+    url VARCHAR(255) NOT NULL,
+    orden INTEGER DEFAULT 1
+);
+```
+
+Multiple images can be associated with one product. The `orden` column determines which image is the principal one (lowest `orden` value) and the display sequence in gallery views. Up to 6 images per product are supported by the admin panel.
+
+### variantes
+
+```sql
+CREATE TABLE variantes (
+    id SERIAL PRIMARY KEY,
+    producto_id INTEGER REFERENCES productos(id) ON DELETE CASCADE,
+    talle_id INTEGER REFERENCES talles(id) ON DELETE RESTRICT,
+    color_id INTEGER REFERENCES colores(id) ON DELETE RESTRICT,
+    stock INTEGER NOT NULL DEFAULT 0,
+    activo BOOLEAN DEFAULT true,
+    UNIQUE (producto_id, talle_id, color_id)
+);
+```
+
+Each row represents one purchasable SKU: a specific product in a specific size and color. The `UNIQUE` constraint prevents duplicate combinations and is also used by the model layer's upsert logic when updating variants (`ON CONFLICT (producto_id, talle_id, color_id) DO UPDATE SET ...`).
+
+## vista_catalogo_productos
+
+The view `vista_catalogo_productos` is the single read surface used by both the public storefront API and the admin panel. Rather than joining tables in every query, the view pre-aggregates all product-related data into one denormalized row per product.
+
+```sql
+CREATE OR REPLACE VIEW vista_catalogo_productos AS
+SELECT
+    p.id,
+    p.nombre,
+    p.descripcion,
+    p.categoria_id,
+    c.nombre AS categoria,
+    p.precio,
+    p.destacado,
+    p.activo,
+    p.fecha_creacion,
+    -- First image by orden
+    (
+        SELECT url
+        FROM producto_imagenes pi
+        WHERE pi.producto_id = p.id
+        ORDER BY orden ASC
+        LIMIT 1
+    ) AS imagen_principal,
+    -- Sum of all variant stock
+    (
+        SELECT COALESCE(SUM(v.stock), 0)
+        FROM variantes v
+        WHERE v.producto_id = p.id
+    ) AS stock_total,
+    -- Per-size stock breakdown: [{talle: 'S', cantidad: 10}, ...]
+    (
+        SELECT COALESCE(json_agg(json_build_object('talle', sub.talle, 'cantidad', sub.cantidad)), '[]'::json)
+        FROM (
+            SELECT t.nombre AS talle, SUM(v.stock) AS cantidad
+            FROM variantes v
+            JOIN talles t ON v.talle_id = t.id
+            WHERE v.producto_id = p.id
+            GROUP BY t.id, t.nombre, t.orden
+            ORDER BY t.orden
+        ) sub
+    ) AS stock_por_talle,
+    -- Distinct color hex codes: ['#F5F5F5', '#1A1A1A']
+    (
+        SELECT COALESCE(json_agg(DISTINCT col.hex), '[]'::json)
+        FROM variantes v
+        JOIN colores col ON v.color_id = col.id
+        WHERE v.producto_id = p.id AND col.hex IS NOT NULL
+    ) AS colores_hex,
+    -- All images ordered by orden: [{url, orden}, ...]
+    (
+        SELECT COALESCE(
+            json_agg(json_build_object('url', pi.url, 'orden', pi.orden) ORDER BY pi.orden ASC),
+            '[]'::json
+        )
+        FROM producto_imagenes pi
+        WHERE pi.producto_id = p.id
+    ) AS imagenes,
+    -- Full variant list: [{talle_id, color_id, stock, activo}, ...]
+    (
+        SELECT COALESCE(
+            json_agg(json_build_object(
+                'talle_id', v.talle_id,
+                'color_id', v.color_id,
+                'stock',    v.stock,
+                'activo',   v.activo
+            )),
+            '[]'::json
+        )
+        FROM variantes v
+        WHERE v.producto_id = p.id
+    ) AS variantes
+FROM productos p
+LEFT JOIN categorias c ON p.categoria_id = c.id;
+```
+
+The view returns these aggregated JSON columns:
+
+| Column            | Type        | Description                                              |
+|-------------------|-------------|----------------------------------------------------------|
+| `imagen_principal`| `text`      | URL of the first image by `orden`                        |
+| `stock_total`     | `integer`   | Sum of all variant stock values                          |
+| `stock_por_talle` | `json array`| `[{ talle, cantidad }]` sorted by size order             |
+| `colores_hex`     | `json array`| Distinct hex codes of all colors with variants           |
+| `imagenes`        | `json array`| All images as `[{ url, orden }]`                         |
+| `talle_ids`       | `json array`| Distinct `talle_id` values used in variants              |
+| `color_ids`       | `json array`| Distinct `color_id` values used in variants              |
+| `variantes`       | `json array`| Full variant list as `[{ talle_id, color_id, stock, activo }]` |
+
+The public controller strips sensitive fields (`stock_total`, `stock_por_talle`, `talle_ids`, `color_ids`, `variantes`, `activo`) before sending the response to the storefront, replacing the numeric stock with a human-readable availability string (`"Disponible"`, `"Últimas unidades"`, or `"Agotado"`).
+
+## Key constraints
+
+The schema enforces referential integrity through foreign keys with carefully chosen delete behaviors.
+
+| Foreign key | References | On delete |
+|---|---|---|
+| `productos.categoria_id` | `categorias(id)` | `SET NULL` — products are preserved if a category is deleted |
+| `producto_imagenes.producto_id` | `productos(id)` | `CASCADE` — images are deleted with the product |
+| `variantes.producto_id` | `productos(id)` | `CASCADE` — variants are deleted with the product |
+| `variantes.talle_id` | `talles(id)` | `RESTRICT` — cannot delete a size that has variants |
+| `variantes.color_id` | `colores(id)` | `RESTRICT` — cannot delete a color that has variants |
+| `detalles_pedido.variante_id` | `variantes(id)` | `RESTRICT` — blocks physical deletion of products with order history |
+
+The `RESTRICT` on `detalles_pedido.variante_id` is the reason the controller returns HTTP 409 with a recommendation to deactivate instead of delete when a product has existing sales records.
+
+<Warning>
+  Attempting a hard `DELETE` on a product that has associated order line items will fail with PostgreSQL error code `23503` (foreign key violation). Use the `PATCH /api/v1/admin/productos/:id/desactivar` endpoint to hide it from the storefront instead.
+</Warning>
+
+## Seed data
+
+Running `inicializar/balsamoa.sql` on a fresh database populates the following initial records:
+
+- **2 categories** — `Hoodie` (buzos con y sin capucha) and `Remera` (remeras de algodón premium)
+- **5 sizes** — `S`, `M`, `L`, `XL`, `XXL` with `orden` values 1–5
+- **8 colors** — Blanco `#F5F5F5`, Negro `#1A1A1A`, Verde `#4A5D23`, Beige `#D5C7A8`, Azul `#1A365D`, Gris Claro `#D3D3D3`, Gris Oscuro `#4A4A4A`, Marrón `#5C4033`
+- **10 products** — 7 hoodies and 3 remeras with prices ranging from $30,000 to $55,000, 3 marked as `destacado`
+- **Variants** — 21 variant rows covering various size/color combinations with realistic stock scenarios (sold-out, low-stock, and fully stocked)
+
+After the seed inserts, the SQL file runs `setval()` on all sequences to advance them past the manually assigned IDs, preventing primary key conflicts when the application creates new records through the API.

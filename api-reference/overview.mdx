@@ -1,0 +1,81 @@
+---
+title: "Balsamoa API Reference: REST Endpoints Overview"
+sidebarTitle: "Overview"
+description: "All Balsamoa Backend REST endpoints at a glance — admin product CRUD, image management, catalog lookups, and the public store API. Base path: /api/v1/."
+---
+
+The Balsamoa Backend exposes a versioned REST API under the `/api/v1/` prefix. All endpoints fall into one of two audience scopes: **admin** routes (`/api/v1/admin/…`) intended for back-office management tools, and **public store** routes (`/api/v1/tienda/…`) designed for the customer-facing storefront. Admin routes expose full product data including raw stock counts, variant IDs, and the `activo` flag. Public store routes filter out inactive products and replace numeric stock with a human-readable availability label so that inventory details are never leaked to shoppers.
+
+## Base URL
+
+All requests are relative to the server root. No additional base path configuration is required beyond the prefix already embedded in each route.
+
+```
+/api/v1/
+```
+
+## Authentication
+
+No token-based authentication is currently implemented. Admin endpoints are accessible to any client that can reach the server. Before deploying to production, restrict all traffic to `/api/v1/admin/*` at the reverse-proxy (e.g. Nginx or Caddy) or Express middleware level — for example by checking a shared secret header or by placing the admin panel behind a VPN.
+
+## Content Type
+
+All request and response bodies use `application/json`. The single exception is the image upload endpoint, which expects a `multipart/form-data` body containing a field named `imagen`.
+
+```
+Content-Type: application/json          ← all other endpoints
+Content-Type: multipart/form-data       ← POST /api/v1/admin/imagenes/subir
+```
+
+## Error Format
+
+Every error response — regardless of HTTP status code — returns a JSON object with at least a `mensaje` field describing what went wrong. Some errors also include a `detalle` field with the raw database error message for debugging purposes.
+
+```json
+{
+  "mensaje": "El precio es obligatorio y debe ser un número positivo"
+}
+```
+
+```json
+{
+  "mensaje": "Error al obtener productos",
+  "detalle": "relation \"vista_catalogo_productos\" does not exist"
+}
+```
+
+## Endpoint Groups
+
+<CardGroup cols={2}>
+  <Card title="Products — Admin CRUD" icon="box" href="/api-reference/products/list">
+    Full create, read, update, and delete operations for products. Includes variant and image management within each request. All responses include raw stock counts and the full variant matrix.
+  </Card>
+  <Card title="Images — Upload & Delete" icon="image">
+    Upload a single image file to disk and receive its public URL, or delete an image by ID removing both the database record and the file from disk. Use the upload endpoint before creating or updating a product.
+  </Card>
+  <Card title="Catalog Lookups" icon="list">
+    Read-only endpoints for the reference tables used in product variants: `GET /api/v1/admin/categorias`, `GET /api/v1/admin/talles`, and `GET /api/v1/admin/colores`. Use the returned IDs when building create/update payloads.
+  </Card>
+  <Card title="Public Store" icon="storefront">
+    Read-only endpoints for the storefront. Only active products are returned. Stock counts are replaced with a plain-language availability label (`Disponible`, `Últimas unidades`, or `Agotado`). Supports an optional `?destacados=true` query parameter.
+  </Card>
+</CardGroup>
+
+## Full Endpoint Index
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/admin/imagenes/subir` | Upload an image file; returns its public URL |
+| `DELETE` | `/api/v1/admin/imagenes/:id` | Delete an image by ID from disk and database |
+| `GET` | `/api/v1/admin/productos` | List all products with full variant and stock data |
+| `GET` | `/api/v1/admin/productos/:id` | Get a single product by ID |
+| `POST` | `/api/v1/admin/productos` | Create a product with images and variants |
+| `PUT` | `/api/v1/admin/productos/:id` | Update a product's fields, images, and variants |
+| `PATCH` | `/api/v1/admin/productos/:id/activar` | Set `activo = true` (re-activate a product) |
+| `PATCH` | `/api/v1/admin/productos/:id/desactivar` | Set `activo = false` (soft-delete a product) |
+| `DELETE` | `/api/v1/admin/productos/:id` | Permanently delete a product and its image files |
+| `GET` | `/api/v1/admin/categorias` | List all product categories |
+| `GET` | `/api/v1/admin/talles` | List all available sizes |
+| `GET` | `/api/v1/admin/colores` | List all available colors with hex codes |
+| `GET` | `/api/v1/tienda/productos` | Public product catalog (active only, censored stock) |
+| `GET` | `/api/v1/tienda/productos/:id` | Public single product (active only, censored stock) |

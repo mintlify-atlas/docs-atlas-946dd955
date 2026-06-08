@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Balsamoa Backend",
+  "projectType": "api-service",
+  "projectName": "Balsamoa Backend",
+  "projectDescription": "A Node.js/Express REST API backend for the Balsamoa clothing store, providing product catalog management, inventory tracking, and a static admin panel backed by a PostgreSQL (Supabase) database.",
   "theme": "luma",
-  "colors": {
-    "primary": "#1A365D",
-    "light": "#D5C7A8",
-    "dark": "#1A1A1A"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/MateoNavarroMN/Balsamoa-Backend"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/MateoNavarroMN/Balsamoa-Backend"
-    }
-  },
+  "primaryColor": "#1A365D",
+  "lightColor": "#D5C7A8",
+  "darkColor": "#1A1A1A",
   "navigation": {
     "tabs": [
       {
@@ -99,5 +87,33 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Full CRUD for product catalog with image and variant management",
+    "Product variants with size (talle) and color combinations and per-variant stock tracking",
+    "Logical activation/deactivation of products (soft delete)",
+    "Image upload and deletion via Multer with disk storage",
+    "Public read-only store endpoints with censored stock information",
+    "Admin panel served as static HTML with real-time catalog management",
+    "PostgreSQL (Supabase) connection via connection pool with SSL",
+    "Database view (vista_catalogo_productos) aggregating product, image, and variant data",
+    "Transactional product creation and updates with ROLLBACK on error",
+    "Vercel deployment support"
+  ],
+  "publicApiSurface": [
+    "GET /api/v1/admin/productos",
+    "GET /api/v1/admin/productos/:id",
+    "POST /api/v1/admin/productos",
+    "PUT /api/v1/admin/productos/:id",
+    "PATCH /api/v1/admin/productos/:id/activar",
+    "PATCH /api/v1/admin/productos/:id/desactivar",
+    "DELETE /api/v1/admin/productos/:id",
+    "POST /api/v1/admin/imagenes/subir",
+    "DELETE /api/v1/admin/imagenes/:id",
+    "GET /api/v1/admin/categorias",
+    "GET /api/v1/admin/talles",
+    "GET /api/v1/admin/colores",
+    "GET /api/v1/tienda/productos",
+    "GET /api/v1/tienda/productos/:id"
+  ]
 }

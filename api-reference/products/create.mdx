@@ -1,0 +1,164 @@
+---
+title: "POST /api/v1/admin/productos — Create a New Product"
+sidebarTitle: "Create Product"
+description: "POST /api/v1/admin/productos — Creates a product with optional images and size/color variants in a single atomic database transaction."
+---
+
+Creating a product is a fully atomic operation. The controller opens a dedicated database connection and issues a `BEGIN` statement before writing anything. The product row is inserted first into the `productos` table; if `imagenes` are provided, they are inserted into `producto_imagenes` one by one; if `variantes` are provided, they are inserted into the `variantes` table. Only when all writes succeed does the controller issue `COMMIT`. If any step fails — for example because a `categoria_id`, `talle_id`, or `color_id` does not exist — the connection is rolled back with `ROLLBACK` and no partial data is left in the database.
+
+## Request
+
+**Method:** `POST`  
+**Path:** `/api/v1/admin/productos`  
+**Content-Type:** `application/json`
+
+### Body Parameters
+
+<ParamField body="nombre" type="string" required>
+  Product display name. Must be a non-empty string. Maximum 150 characters (enforced by the database column definition).
+</ParamField>
+
+<ParamField body="descripcion" type="string">
+  Optional free-text product description. Stored as `TEXT` in PostgreSQL; no length limit is enforced at the API level.
+</ParamField>
+
+<ParamField body="precio" type="number" required>
+  Product price in Argentine Pesos (ARS). Must be a positive number greater than zero. Stored as `DECIMAL(10,2)`.
+</ParamField>
+
+<ParamField body="categoria_id" type="integer" required>
+  ID of the product category. Must reference an existing row in the `categorias` table. Retrieve valid IDs from `GET /api/v1/admin/categorias`. Current seed values: `1` (Hoodie), `2` (Remera).
+</ParamField>
+
+<ParamField body="destacado" type="boolean">
+  Whether to mark this product as featured. Defaults to `false` if omitted. Featured products appear in highlighted sections of the storefront.
+</ParamField>
+
+<ParamField body="activo" type="boolean">
+  Whether the product should be immediately visible in the public store. Defaults to `true` if omitted. Set to `false` to create a product in draft state.
+</ParamField>
+
+<ParamField body="imagenes" type="array">
+  Optional array of image objects to associate with the product. Each element must have a `url` field. Upload images first using `POST /api/v1/admin/imagenes/subir` and include the returned URL here.
+
+  <Expandable title="imagen item">
+    <ParamField body="url" type="string" required>
+      Public path to the image file, as returned by the upload endpoint (e.g. `"/recursos/imagenes/productos/1700000000000_mi_foto.webp"`).
+    </ParamField>
+    <ParamField body="orden" type="integer">
+      Display order for this image. Lower values appear first. Defaults to `1` if omitted.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="variantes" type="array">
+  Optional array of size/color/stock combinations. Each combination must include `talle_id` and `color_id`, which must reference existing rows in their respective tables. The combination of `(producto_id, talle_id, color_id)` must be unique per product — duplicate combinations in this array will cause the transaction to fail.
+
+  <Expandable title="variante item">
+    <ParamField body="talle_id" type="integer" required>
+      Foreign key referencing the `talles` table. Valid seed IDs: `1` (S), `2` (M), `3` (L), `4` (XL), `5` (XXL).
+    </ParamField>
+    <ParamField body="color_id" type="integer" required>
+      Foreign key referencing the `colores` table. Valid seed IDs: `1` (Blanco), `2` (Negro), `3` (Verde), `4` (Beige), `5` (Azul), `6` (Gris Claro), `7` (Gris Oscuro), `8` (Marrón).
+    </ParamField>
+    <ParamField body="stock" type="integer">
+      Number of units available for this size/color combination. Must be a non-negative integer. Defaults to `0` if omitted.
+    </ParamField>
+    <ParamField body="activo" type="boolean">
+      Whether this specific variant is available for purchase. Defaults to `true` if omitted.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Example Request Body
+
+```json
+{
+  "nombre": "Hoodie Basic Marrón",
+  "descripcion": "Buzo con capucha en tono marrón oscuro. Pequeño logo bordado en el pecho.",
+  "precio": 40000,
+  "categoria_id": 1,
+  "destacado": false,
+  "activo": true,
+  "imagenes": [
+    { "url": "/recursos/imagenes/productos/1700000000000_hoodie_marron.webp", "orden": 1 }
+  ],
+  "variantes": [
+    { "talle_id": 1, "color_id": 8, "stock": 10, "activo": true },
+    { "talle_id": 2, "color_id": 8, "stock": 15, "activo": true },
+    { "talle_id": 3, "color_id": 8, "stock": 12, "activo": true },
+    { "talle_id": 4, "color_id": 8, "stock": 8,  "activo": true }
+  ]
+}
+```
+
+```bash
+curl -X POST http://localhost:3000/api/v1/admin/productos \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombre": "Hoodie Basic Marrón",
+    "descripcion": "Buzo con capucha en tono marrón oscuro. Pequeño logo bordado en el pecho.",
+    "precio": 40000,
+    "categoria_id": 1,
+    "destacado": false,
+    "activo": true,
+    "imagenes": [
+      { "url": "/recursos/imagenes/productos/1700000000000_hoodie_marron.webp", "orden": 1 }
+    ],
+    "variantes": [
+      { "talle_id": 1, "color_id": 8, "stock": 10, "activo": true },
+      { "talle_id": 2, "color_id": 8, "stock": 15, "activo": true },
+      { "talle_id": 3, "color_id": 8, "stock": 12, "activo": true },
+      { "talle_id": 4, "color_id": 8, "stock": 8,  "activo": true }
+    ]
+  }'
+```
+
+## Response
+
+### 201 — Created
+
+Returns a `mensaje` string and a `producto` object containing the row inserted into the `productos` table (the output of `RETURNING *`). Note that the returned `producto` is the raw table row, not the enriched view object — it does not include `imagenes`, `variantes`, or `stock_total`. Use `GET /api/v1/admin/productos/:id` to retrieve the full denormalized record after creation.
+
+```json
+{
+  "mensaje": "Producto creado exitosamente junto con sus imágenes y variantes",
+  "producto": {
+    "id": 11,
+    "nombre": "Hoodie Basic Marrón",
+    "descripcion": "Buzo con capucha en tono marrón oscuro. Pequeño logo bordado en el pecho.",
+    "precio": "40000.00",
+    "categoria_id": 1,
+    "destacado": false,
+    "activo": true,
+    "fecha_creacion": "2024-11-15T14:30:00.000Z"
+  }
+}
+```
+
+<ResponseField name="mensaje" type="string">
+  Human-readable confirmation string.
+</ResponseField>
+
+<ResponseField name="producto" type="object">
+  The raw row inserted into `productos` as returned by PostgreSQL's `RETURNING *`. Contains `id`, `nombre`, `descripcion`, `precio`, `categoria_id`, `destacado`, `activo`, and `fecha_creacion`. Does not include joined or aggregated fields from the view.
+</ResponseField>
+
+## Error Cases
+
+| Status | Condition | Response body |
+|--------|-----------|---------------|
+| `400` | `nombre` is missing or empty | `{"mensaje": "El nombre es obligatorio y debe ser un texto válido"}` |
+| `400` | `precio` is missing, non-numeric, or ≤ 0 | `{"mensaje": "El precio es obligatorio y debe ser un número positivo"}` |
+| `400` | `categoria_id` is missing or non-numeric | `{"mensaje": "La categoría (categoria_id) es obligatoria y debe ser un número"}` |
+| `400` | `imagenes` is not an array | `{"mensaje": "El campo \"imagenes\" debe ser un arreglo"}` |
+| `400` | An image object is missing its `url` | `{"mensaje": "Cada imagen debe tener un campo \"url\" válido"}` |
+| `400` | `variantes` is not an array | `{"mensaje": "El campo \"variantes\" debe ser un arreglo"}` |
+| `400` | A variant is missing `talle_id` or `color_id` | `{"mensaje": "Cada variante debe tener obligatoriamente \"talle_id\" y \"color_id\""}` |
+| `400` | A variant's `stock` is negative | `{"mensaje": "El stock de cada variante debe ser un número no negativo"}` |
+| `400` | `categoria_id`, `talle_id`, or `color_id` does not exist in its table (PostgreSQL error `23503`) | `{"mensaje": "Error de consistencia: La categoría, talle o color especificado no existen"}` |
+| `500` | Unexpected database or server error | `{"mensaje": "Error interno en el servidor al intentar crear el producto"}` |
+
+<Tip>
+  Image files must be uploaded **before** calling this endpoint. Use `POST /api/v1/admin/imagenes/subir` with a `multipart/form-data` body containing the field `imagen`. The response returns a `url` field (e.g. `"/recursos/imagenes/productos/1700000000000_archivo.webp"`) which you then include in the `imagenes` array when creating or updating a product.
+</Tip>

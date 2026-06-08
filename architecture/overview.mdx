@@ -1,0 +1,117 @@
+---
+title: "Balsamoa Backend Architecture and Module Structure"
+sidebarTitle: "Overview"
+description: "How Balsamoa Backend is structured: Express server, modular routes/controllers/models, static file serving, and PostgreSQL connection pooling."
+---
+
+Balsamoa Backend is a Node.js/Express REST API that follows a strict three-layer architecture: every feature is split into a **routes** file that maps HTTP verbs and paths, a **controller** file that validates input and orchestrates the response, and a **model** file that executes parameterized SQL queries against a PostgreSQL database hosted on Supabase. This separation keeps validation logic out of the database layer and keeps raw SQL out of the HTTP layer, making each piece independently testable and easy to extend.
+
+## Module structure
+
+All business logic lives under `src/modulos/`. Each subdirectory represents one domain and contains exactly three files with a consistent naming convention.
+
+```
+src/
+├── server.mjs                        # Express bootstrap and middleware
+├── config/
+│   └── conexion.bd.mjs               # pg Pool + SSL configuration
+└── modulos/
+    ├── productos/
+    │   ├── rutas.productos.mjs       # Route definitions
+    │   ├── controlador.productos.mjs # Input validation & orchestration
+    │   └── modelo.productos.mjs      # SQL queries via pool
+    ├── categorias/
+    │   ├── rutas.categorias.mjs
+    │   ├── controlador.categorias.mjs
+    │   └── modelo.categorias.mjs
+    ├── talles/
+    │   ├── rutas.talles.mjs
+    │   ├── controlador.talles.mjs
+    │   └── modelo.talles.mjs
+    └── colores/
+        ├── rutas.colores.mjs
+        ├── controlador.colores.mjs
+        └── modelo.colores.mjs
+```
+
+Each module's router is imported in `server.mjs` and mounted on the app with `app.use()`. Adding a new domain means creating a new folder and registering its router — no changes to existing modules required.
+
+## Request lifecycle
+
+Every API call travels through the same three-layer pipeline before a JSON response is sent back to the client.
+
+<Steps>
+  <Step title="HTTP request arrives">
+    Express receives the request and runs the JSON body parser middleware (`express.json()`), making `req.body` available as a parsed object to all subsequent handlers.
+  </Step>
+  <Step title="Router matches the path">
+    The relevant router file (e.g. `rutas.productos.mjs`) matches the HTTP method and URL pattern and delegates to the appropriate controller function. Route parameters (`:id`) and query strings are accessible on the request object.
+  </Step>
+  <Step title="Controller validates and orchestrates">
+    The controller function checks that required fields are present, that numeric values are in range, and that array structures are well-formed. If validation fails it returns a `400` JSON error immediately. If validation passes it calls one or more model functions.
+  </Step>
+  <Step title="Model executes SQL via pool">
+    The model function runs a parameterized query against the Supabase PostgreSQL database using the shared `pg` connection pool. Write operations that touch multiple tables (create product + images + variants) use a dedicated client with explicit `BEGIN` / `COMMIT` / `ROLLBACK` to guarantee atomicity.
+  </Step>
+  <Step title="JSON response returned">
+    The controller receives the result rows from the model and sends a structured JSON response — a `2xx` status with the data on success, or a `4xx`/`5xx` status with a descriptive `mensaje` field on error.
+  </Step>
+</Steps>
+
+## Static file serving
+
+`server.mjs` registers three static directories before mounting the API routers, so every static asset is resolved before Express even looks at the API routes.
+
+```js
+// src/server.mjs
+app.use('/recursos', express.static(path.join(__dirname, './public/recursos')))
+app.use('/admin',    express.static(path.join(__dirname, './public/admin')))
+app.use('/',         express.static(path.join(__dirname, './public/tienda')))
+```
+
+| Mount path   | Source directory          | Contents                                              |
+|--------------|---------------------------|-------------------------------------------------------|
+| `/recursos`  | `src/public/recursos/`    | Shared CSS, JavaScript bundles, and product images    |
+| `/admin`     | `src/public/admin/`       | Admin panel single-page HTML + its own JS/CSS         |
+| `/`          | `src/public/tienda/`      | Customer-facing store HTML pages                      |
+
+Because `/recursos` is declared first, asset paths like `/recursos/css/admin.css` and `/recursos/imagenes/productos/*.webp` resolve correctly regardless of which section of the site the browser is viewing.
+
+## Database connection
+
+The entire application shares a single `pg.Pool` instance exported from `src/config/conexion.bd.mjs`. Connection pooling means the server reuses open TCP connections to Supabase instead of opening a new one per query, which is critical for performance on a serverless-friendly cloud database.
+
+```js
+// src/config/conexion.bd.mjs
+import pg from 'pg'
+import dotenv from 'dotenv'
+
+dotenv.config()
+
+const { Pool } = pg
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+})
+
+export default pool
+```
+
+The `DATABASE_URL` environment variable holds the full Supabase connection string and is loaded at startup via `dotenv`. The `ssl.rejectUnauthorized: false` flag is required because Supabase uses a self-signed certificate chain for its pooler endpoint — it enables encrypted transport while skipping CA verification.
+
+<Tip>
+  Store `DATABASE_URL` in a `.env` file that is listed in `.gitignore`. Never commit credentials to version control.
+</Tip>
+
+Every model file imports this single pool instance and calls `pool.query()` for simple reads or `pool.connect()` for transactions that need a dedicated client.
+
+## ES Modules
+
+All source files use the `.mjs` extension and ES Module syntax (`import` / `export`). The project's `package.json` also sets `"type": "module"` so Node.js treats every `.js` file as an ES module by default. This means:
+
+- `import.meta.url` is used to derive `__filename` and `__dirname` (which are not available natively in ESM).
+- All inter-module imports must include the full file extension (e.g. `./modelo.productos.mjs`).
+- Dynamic `require()` calls are not available; use `import()` for conditional loading.

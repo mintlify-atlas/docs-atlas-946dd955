@@ -1,0 +1,144 @@
+---
+title: "GET /api/v1/tienda/productos/:id — Public Product Detail"
+sidebarTitle: "Store Product Detail"
+description: "GET /api/v1/tienda/productos/:id — Returns a single active product for the public storefront by ID, with sanitized availability information."
+---
+
+This endpoint returns the full details of a single product from the public storefront. Like the catalog list endpoint, it enforces visibility rules — only products with `activo = true` are returned, and all raw stock figures are replaced with sanitized availability information. Use this endpoint to render individual product pages in the store.
+
+## Request
+
+| Property | Value                               |
+|----------|-------------------------------------|
+| Method   | `GET`                               |
+| Path     | `/api/v1/tienda/productos/:id`      |
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the product to retrieve. Must be a valid integer. IDs are stable and match those returned by the catalog list endpoint.
+</ParamField>
+
+### Example
+
+```bash
+curl https://your-api.com/api/v1/tienda/productos/4
+```
+
+## Behavior
+
+The server queries the `vista_catalogo_productos` view filtered by both `id = $1` AND `activo = true`. If the product exists but has been deactivated by an admin, the endpoint returns `404` rather than exposing the inactive record. This ensures the public store never serves products that have been logically deleted or hidden.
+
+## Response
+
+**200 OK** — A single sanitized product object. The response schema is identical to the objects in the store catalog list — raw stock fields are removed and `disponibilidad` plus a boolean-only `stock_por_talle` are added.
+
+```json
+{
+  "id": 4,
+  "nombre": "Remera Blanca Guardapampa",
+  "descripcion": "Remera de manga corta color crema con logo en el pecho.",
+  "categoria_id": 2,
+  "categoria": "Remera",
+  "precio": "30000.00",
+  "destacado": true,
+  "fecha_creacion": "2024-01-15T12:00:00.000Z",
+  "imagen_principal": "/recursos/imagenes/productos/Remera Blanca Guardapampa.webp",
+  "colores_hex": ["#F5F5F5"],
+  "imagenes": [
+    {
+      "url": "/recursos/imagenes/productos/Remera Blanca Guardapampa.webp",
+      "orden": 1
+    }
+  ],
+  "disponibilidad": "Últimas unidades",
+  "stock_por_talle": [
+    { "talle": "L",  "tieneStock": true },
+    { "talle": "XL", "tieneStock": true }
+  ]
+}
+```
+
+### Response Fields
+
+<ResponseField name="id" type="integer">
+  The unique product ID.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  The product name.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string">
+  The product description. May be `null`.
+</ResponseField>
+
+<ResponseField name="categoria_id" type="integer">
+  The numeric ID of the product's category.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  The display name of the product's category (e.g., `"Hoodie"`, `"Remera"`).
+</ResponseField>
+
+<ResponseField name="precio" type="string">
+  The product price as a decimal string (e.g., `"30000.00"`).
+</ResponseField>
+
+<ResponseField name="destacado" type="boolean">
+  Whether this product is marked as featured.
+</ResponseField>
+
+<ResponseField name="fecha_creacion" type="string">
+  ISO 8601 timestamp of when the product record was created.
+</ResponseField>
+
+<ResponseField name="imagen_principal" type="string">
+  URL of the first image (lowest `orden` value). May be `null` if no images are attached.
+</ResponseField>
+
+<ResponseField name="colores_hex" type="array">
+  An array of distinct hex color codes for all variants of this product. Use these to render color swatches on the product detail page.
+</ResponseField>
+
+<ResponseField name="imagenes" type="array">
+  All images associated with this product, ordered by `orden` ascending.
+
+  <Expandable title="Image object fields">
+    <ResponseField name="url" type="string">
+      The public URL path of the image.
+    </ResponseField>
+    <ResponseField name="orden" type="integer">
+      The display order index for this image (1-based).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="disponibilidad" type="string">
+  A human-readable availability label. One of `"Disponible"` (stock > 3), `"Últimas unidades"` (stock 1–3), or `"Agotado"` (stock = 0).
+</ResponseField>
+
+<ResponseField name="stock_por_talle" type="array">
+  Per-size availability, with exact quantities removed. Only sizes that have at least one variant defined for this product are included.
+
+  <Expandable title="Size availability object fields">
+    <ResponseField name="talle" type="string">
+      The size label (e.g., `"S"`, `"M"`, `"XL"`).
+    </ResponseField>
+    <ResponseField name="tieneStock" type="boolean">
+      `true` if at least one unit is available in this size across all color variants.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Error Cases
+
+| Status | Cause                                                          | Response body                                                    |
+|--------|----------------------------------------------------------------|------------------------------------------------------------------|
+| `400`  | `id` path parameter is not a valid number                      | `{"mensaje": "El ID del producto debe ser un número válido"}`    |
+| `404`  | No active product found for the given ID (not found or inactive) | `{"mensaje": "Producto no encontrado o no disponible"}`         |
+| `500`  | Database query failed                                          | `{"mensaje": "Error al obtener el producto"}`                    |
+
+<Tip>
+  If a product exists but returns `404` on this endpoint, it has likely been deactivated by an admin. To toggle product visibility, use the admin logical-delete endpoints: `PATCH /api/v1/admin/productos/:id/desactivar` to hide a product from the public store, and `PATCH /api/v1/admin/productos/:id/activar` to restore it. Neither endpoint deletes the product record from the database.
+</Tip>

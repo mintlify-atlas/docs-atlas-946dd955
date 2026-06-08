@@ -1,0 +1,138 @@
+---
+title: "Deploy Balsamoa Backend to Vercel"
+sidebarTitle: "Vercel"
+description: "Step-by-step guide to deploying Balsamoa Backend on Vercel with a Supabase PostgreSQL database and environment variable configuration."
+---
+
+Vercel is the recommended platform for deploying Balsamoa Backend to production. Because Vercel runs your code as serverless functions, a few configuration details — particularly around the database connection and file storage — are important to get right before you go live. This guide walks you through every step, from importing the repository to verifying the live deployment.
+
+## Prerequisites
+
+Before you begin, make sure you have the following ready:
+
+- A [Vercel account](https://vercel.com/signup) (the free Hobby plan is sufficient)
+- A Supabase project with the Balsamoa database schema already initialized
+- Node.js 18 or later installed locally (for running the project during development)
+- The repository pushed to a GitHub account that Vercel can access
+
+## Deployment steps
+
+<Steps>
+  <Step title="Push your repository to GitHub">
+    Make sure the latest version of your code is on the `main` branch of your GitHub repository. Vercel will pull directly from GitHub on every deploy.
+
+    ```bash
+    git add .
+    git commit -m "chore: prepare for Vercel deployment"
+    git push origin main
+    ```
+  </Step>
+
+  <Step title="Import the project in the Vercel dashboard">
+    1. Log in to [vercel.com](https://vercel.com) and click **Add New → Project**.
+    2. Under **Import Git Repository**, select the GitHub account that owns the repo, then choose **Balsamoa-Backend** from the list.
+    3. Click **Import** to proceed to the build configuration screen.
+  </Step>
+
+  <Step title="Configure build settings">
+    On the configuration screen, set the following options and leave everything else at its default:
+
+    | Setting | Value |
+    |---|---|
+    | Framework Preset | **Other** |
+    | Build Command | *(leave empty)* |
+    | Output Directory | *(leave empty)* |
+    | Install Command | `pnpm install` |
+
+    Balsamoa Backend is a plain Node.js/Express server — there is no build step and no compiled output directory. Setting the framework to **Other** tells Vercel not to apply any framework-specific defaults.
+  </Step>
+
+  <Step title="Add environment variables">
+    Scroll down to the **Environment Variables** section and add the following:
+
+    | Name | Value |
+    |---|---|
+    | `DATABASE_URL` | Your Supabase connection pooler URI (see [Supabase pooler URL](#supabase-pooler-url) below) |
+
+    `PUERTO` does **not** need to be set. Vercel assigns the port automatically; the Express server falls back to port `3000` locally when the variable is absent, but on Vercel the platform handles port binding entirely.
+  </Step>
+
+  <Step title="Deploy">
+    Click **Deploy**. Vercel will install dependencies with `pnpm install`, package the server as a serverless function, and publish it to a `.vercel.app` URL. The first deployment typically takes about 60–90 seconds.
+
+    Once the build log shows **"Deployment completed"**, your API is live.
+  </Step>
+</Steps>
+
+## The vercel.json file
+
+The repository includes a `vercel.json` file at the project root that controls how Vercel handles incoming URLs:
+
+```json
+{
+  "cleanUrls": true,
+  "trailingSlash": false
+}
+```
+
+| Option | What it does |
+|---|---|
+| `cleanUrls: true` | Strips `.html` extensions from static file URLs (e.g. `/admin/index` instead of `/admin/index.html`). This keeps the public-facing URLs tidy and consistent. |
+| `trailingSlash: false` | Ensures Vercel redirects `https://your-app.vercel.app/api/v1/tienda/productos/` to the version without a trailing slash. This prevents duplicate-URL issues and matches the route definitions in Express. |
+
+## Supabase pooler URL
+
+Supabase provides two ways to connect to your PostgreSQL database:
+
+| Connection type | Port | When to use |
+|---|---|---|
+| **Direct connection** | `5432` | Long-lived processes — local development, dedicated servers, Docker containers |
+| **Connection pooler (PgBouncer)** | `6543` | Serverless functions — Vercel, AWS Lambda, Netlify Functions |
+
+Vercel functions are short-lived: they spin up to handle a request and are torn down immediately afterward. If every function invocation opened a direct PostgreSQL connection on port `5432`, you would exhaust Supabase's connection limit very quickly. The pooler on port `6543` uses PgBouncer to multiplex many short-lived connections through a smaller pool of real database connections, keeping the total count manageable.
+
+To get your pooler URL:
+
+1. Open your Supabase project → **Project Settings** → **Database**.
+2. Under **Connection string**, select the **URI** tab.
+3. Copy the URI — it will look like `postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres`.
+4. **Change the port from `5432` to `6543`** and append `?pgbouncer=true` to the query string.
+
+The final string should look like:
+
+```
+postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
+```
+
+Paste this value as the `DATABASE_URL` environment variable in Vercel.
+
+## Image uploads on Vercel
+
+<Warning>
+  Balsamoa Backend uses Multer to save uploaded images to the local filesystem under `src/public/recursos`. This works perfectly in a local development environment, but **Vercel's filesystem is ephemeral** — files written during one function invocation are not available in the next, and they are wiped entirely on each new deployment.
+
+  For production image hosting, replace the local Multer disk storage with a cloud storage provider such as **Supabase Storage**, **Amazon S3**, or **Cloudinary**. These services store files independently of your serverless functions and serve them over a stable, persistent URL.
+</Warning>
+
+## Verifying the deployment
+
+Once Vercel reports a successful deployment, confirm the API is reachable by calling the public products endpoint with `curl`:
+
+```bash
+curl https://your-app.vercel.app/api/v1/tienda/productos
+```
+
+A successful response returns a JSON array of active products:
+
+```json
+[
+  {
+    "id": 1,
+    "nombre": "Remera Básica",
+    "precio": 15000,
+    "activo": true
+  }
+]
+```
+
+If you receive a `500` error, double-check that `DATABASE_URL` is set correctly in the Vercel project's environment variable settings and that the pooler port is `6543`.

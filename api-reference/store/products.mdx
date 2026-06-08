@@ -1,0 +1,166 @@
+---
+title: "GET /api/v1/tienda/productos — Public Product Catalog"
+sidebarTitle: "Store Products"
+description: "GET /api/v1/tienda/productos — Returns active products for the public storefront with sanitized stock labels and optional featured filtering."
+---
+
+This is the public-facing, read-only endpoint for the Balsamoa storefront. It returns only products where `activo = true`, making it safe to expose directly to end customers. All raw stock quantities are stripped from the response and replaced with human-readable availability labels, preventing customers from using exact inventory numbers to their advantage.
+
+## Request
+
+| Property | Value                           |
+|----------|---------------------------------|
+| Method   | `GET`                           |
+| Path     | `/api/v1/tienda/productos`      |
+
+### Query Parameters
+
+<ParamField query="destacados" type="string">
+  Pass `"true"` to filter the response to only products marked as featured (`destacado = true`). Omit this parameter to return all active products. Any value other than `"true"` is treated as `false`.
+</ParamField>
+
+### Examples
+
+Fetch all active products:
+
+```bash
+curl https://your-api.com/api/v1/tienda/productos
+```
+
+Fetch only featured products:
+
+```bash
+curl "https://your-api.com/api/v1/tienda/productos?destacados=true"
+```
+
+## Response
+
+**200 OK** — An array of sanitized product objects ordered by `id` descending (newest first). Returns an empty array `[]` if no active products exist.
+
+The public response differs from the admin catalog in the following ways:
+
+- `stock_total` — **removed** (raw integer hidden from public)
+- `stock_por_talle` — **replaced** with a sanitized array of `{ talle, tieneStock }` objects (no quantities)
+- `talle_ids` — **removed**
+- `color_ids` — **removed**
+- `variantes` — **removed**
+- `activo` — **removed**
+- `disponibilidad` — **added** (`"Disponible"`, `"Últimas unidades"`, or `"Agotado"`)
+
+### Availability Labels
+
+| `disponibilidad` value | Condition            |
+|------------------------|----------------------|
+| `"Disponible"`         | Total stock > 3      |
+| `"Últimas unidades"`   | Total stock 1 – 3    |
+| `"Agotado"`            | Total stock = 0      |
+
+### Example Response
+
+```json
+[
+  {
+    "id": 3,
+    "nombre": "Hoodie Basic Verde",
+    "descripcion": "Buzo con capucha verde oliva o militar.",
+    "categoria_id": 1,
+    "categoria": "Hoodie",
+    "precio": "40000.00",
+    "destacado": true,
+    "fecha_creacion": "2024-01-15T12:00:00.000Z",
+    "imagen_principal": "/recursos/imagenes/productos/Hoodie Basic Verde.webp",
+    "colores_hex": ["#4A5D23"],
+    "imagenes": [
+      { "url": "/recursos/imagenes/productos/Hoodie Basic Verde.webp", "orden": 1 }
+    ],
+    "disponibilidad": "Disponible",
+    "stock_por_talle": [
+      { "talle": "S", "tieneStock": true },
+      { "talle": "M", "tieneStock": true },
+      { "talle": "L", "tieneStock": true }
+    ]
+  }
+]
+```
+
+### Response Fields
+
+<ResponseField name="id" type="integer">
+  The unique product ID.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  The product name.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string">
+  The product description. May be `null`.
+</ResponseField>
+
+<ResponseField name="categoria_id" type="integer">
+  The numeric ID of the product's category.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  The display name of the product's category (e.g., `"Hoodie"`, `"Remera"`).
+</ResponseField>
+
+<ResponseField name="precio" type="string">
+  The product price as a decimal string (e.g., `"40000.00"`).
+</ResponseField>
+
+<ResponseField name="destacado" type="boolean">
+  Whether this product is marked as featured.
+</ResponseField>
+
+<ResponseField name="fecha_creacion" type="string">
+  ISO 8601 timestamp of when the product record was created.
+</ResponseField>
+
+<ResponseField name="imagen_principal" type="string">
+  URL of the first image (lowest `orden` value). May be `null` if no images are attached.
+</ResponseField>
+
+<ResponseField name="colores_hex" type="array">
+  An array of distinct hex color codes for all variants of this product (e.g., `["#F5F5F5", "#1A1A1A"]`). Use these to render color swatches.
+</ResponseField>
+
+<ResponseField name="imagenes" type="array">
+  All images associated with this product, ordered by `orden` ascending.
+
+  <Expandable title="Image object fields">
+    <ResponseField name="url" type="string">
+      The public URL path of the image.
+    </ResponseField>
+    <ResponseField name="orden" type="integer">
+      The display order index for this image (1-based).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="disponibilidad" type="string">
+  A human-readable availability label derived from the total stock across all variants. One of `"Disponible"`, `"Últimas unidades"`, or `"Agotado"`.
+</ResponseField>
+
+<ResponseField name="stock_por_talle" type="array">
+  A sanitized breakdown of stock availability per size. Each object indicates whether a size has any stock — exact quantities are not exposed.
+
+  <Expandable title="Size availability object fields">
+    <ResponseField name="talle" type="string">
+      The size label (e.g., `"S"`, `"M"`, `"XL"`).
+    </ResponseField>
+    <ResponseField name="tieneStock" type="boolean">
+      `true` if at least one unit is available in this size; `false` if stock is 0.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Error Cases
+
+| Status | Cause                         | Response body                                        |
+|--------|-------------------------------|------------------------------------------------------|
+| `500`  | Database query failed         | `{"mensaje": "Error al obtener el catálogo"}`        |
+
+<Note>
+  This endpoint is intentionally designed to hide raw stock numbers from public consumers. Exact inventory quantities are only accessible through the admin endpoints (`GET /api/v1/admin/productos`). The sanitization is applied in the server-side `limpiarCampos` helper — the database view `vista_catalogo_productos` always returns full data, and the filtering happens in the controller before the response is sent.
+</Note>

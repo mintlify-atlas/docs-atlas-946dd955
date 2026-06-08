@@ -1,0 +1,94 @@
+---
+title: "Environment Variables Reference for Balsamoa Backend"
+sidebarTitle: "Environment"
+description: "Complete reference for all environment variables used by Balsamoa Backend, including DATABASE_URL format, SSL configuration, and port settings."
+---
+
+Balsamoa Backend reads its runtime configuration from environment variables loaded by the `dotenv` package. In local development these variables are defined in a `.env` file at the project root; on Vercel they are set directly in the project dashboard. This page documents every variable the application recognises, the correct format for each value, and where to find the information you need from Supabase.
+
+## .env.example
+
+The repository ships with an `.env.example` file inside the `inicializar/` folder. Copy it to the project root and fill in your values before starting the server for the first time:
+
+```bash
+# inicializar/.env.example
+
+# Cambiar puerto 5432 a 6543
+DATABASE_URL=ingresar_url_de_supabase_aqui
+PUERTO=3003
+```
+
+To use it:
+
+```bash
+cp inicializar/.env.example .env
+# then open .env and replace the placeholder values
+```
+
+## Variable reference
+
+<ParamField path="DATABASE_URL" type="string" required>
+  Full PostgreSQL connection string used by the `pg` Pool in `src/config/conexion.bd.mjs` to connect to the database.
+
+  For Supabase, you must use the **connection pooler URI** with port **6543** (not the direct connection on port 5432). Append `?pgbouncer=true` to the query string to enable PgBouncer compatibility mode.
+
+  **Format:**
+  ```
+  postgresql://[user]:[password]@[host]:6543/[db]?pgbouncer=true
+  ```
+
+  **Example:**
+  ```
+  postgresql://postgres.abcdefghijkl:MySecretPassword@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+  ```
+</ParamField>
+
+<ParamField path="PUERTO" type="number" default="3000">
+  HTTP port that the Express server listens on when running locally. Defined in `src/server.mjs` as:
+
+  ```js
+  const PUERTO = process.env.PUERTO || 3000
+  ```
+
+  **This variable is not needed on Vercel.** Vercel assigns and manages the port for serverless functions automatically. Setting it in the Vercel environment variable panel has no effect.
+
+  Set it to any free port on your machine during local development — the `.env.example` uses `3003` as a sensible default to avoid conflicts with other common development servers.
+</ParamField>
+
+## SSL configuration
+
+Supabase hosts PostgreSQL in the cloud and requires all connections to be encrypted with TLS. The `pg` Pool in `src/config/conexion.bd.mjs` always enables SSL with the following configuration:
+
+```js
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+})
+```
+
+Setting `rejectUnauthorized: false` tells the Node.js TLS stack to accept Supabase's certificate without verifying it against a local CA bundle. This is the correct and expected setting for Supabase's managed PostgreSQL — the certificate is valid, but Node.js would otherwise reject it because it cannot resolve the certificate authority in some environments. You do not need to configure any additional SSL variables.
+
+## Where to find your Supabase DATABASE_URL
+
+1. Open your project in the [Supabase dashboard](https://supabase.com/dashboard).
+2. Go to **Project Settings** (the gear icon in the left sidebar).
+3. Click the **Database** tab.
+4. Scroll down to the **Connection string** section and select the **URI** tab.
+5. Copy the displayed URI.
+6. **Change the port from `5432` to `6543`** in the copied string.
+7. Add `?pgbouncer=true` at the end of the URI if it is not already present.
+
+Paste the resulting string as the value of `DATABASE_URL` in your `.env` file (locally) or in the Vercel environment variable panel (production).
+
+<Tip>
+  Keep separate environment files for each stage of development to avoid accidentally connecting to the production database while working locally.
+
+  ```
+  .env.development   ← local Supabase project or a local Postgres instance
+  .env.production    ← production Supabase project (never commit this file)
+  ```
+
+  You can load a specific file by setting `DOTENV_CONFIG_PATH` or by using a library like `dotenv-flow`. At minimum, make sure `.env` and `.env.production` are both listed in your `.gitignore` so credentials never end up in version control.
+</Tip>

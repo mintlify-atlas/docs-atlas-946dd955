@@ -1,0 +1,60 @@
+---
+title: "DELETE /api/v1/admin/imagenes/:id — Delete a Product Image"
+sidebarTitle: "Delete Image"
+description: "DELETE /api/v1/admin/imagenes/:id — Removes an image record from the database and deletes the file from disk by the image's numeric ID."
+---
+
+This endpoint permanently removes a product image in two steps: it first deletes the physical file from the server's disk, then removes the corresponding record from the `producto_imagenes` table. Use this when you want to discard a standalone image that is no longer needed without modifying the product itself.
+
+## Request
+
+| Property | Value                                    |
+|----------|------------------------------------------|
+| Method   | `DELETE`                                 |
+| Path     | `/api/v1/admin/imagenes/:id`             |
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the image record in the `producto_imagenes` table. This ID is returned when images are listed via the admin product endpoints.
+</ParamField>
+
+## Behavior
+
+1. The server validates that `id` is a valid integer.
+2. It looks up the image record in `producto_imagenes` by ID to retrieve the stored `url`.
+3. If the `url` starts with `/recursos/`, the corresponding file is deleted from the local disk using `fs.unlinkSync`.
+4. The database record is then deleted with `DELETE FROM producto_imagenes WHERE id = $1`.
+5. A success message is returned once both operations complete.
+
+### Example
+
+```bash
+curl -X DELETE https://your-api.com/api/v1/admin/imagenes/7
+```
+
+## Response
+
+**200 OK**
+
+```json
+{
+  "mensaje": "Imagen eliminada del disco y de la base de datos"
+}
+```
+
+<ResponseField name="mensaje" type="string">
+  Confirmation that the file was removed from disk and the record was deleted from the database.
+</ResponseField>
+
+## Error Cases
+
+| Status | Cause                                              | Response body                                                       |
+|--------|----------------------------------------------------|---------------------------------------------------------------------|
+| `400`  | `id` path parameter is not a valid number          | `{"mensaje": "El ID de imagen debe ser un número válido"}`          |
+| `404`  | No image record found for the given ID             | `{"mensaje": "Imagen no encontrada"}`                               |
+| `500`  | Database error while deleting the record           | `{"mensaje": "Error al eliminar la imagen de la base de datos"}`    |
+
+<Note>
+  This endpoint deletes the image independently of any product update. Alternatively, when you call `PUT /api/v1/admin/productos/:id` and supply a new `imagenes` array, the API automatically computes which old images are no longer referenced and removes their files from disk before persisting the new list. This means you generally only need this standalone endpoint when discarding an image that was uploaded but never attached to a product.
+</Note>

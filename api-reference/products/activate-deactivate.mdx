@@ -1,0 +1,121 @@
+---
+title: "Activate and Deactivate Products (Soft Delete)"
+sidebarTitle: "Activate / Deactivate"
+description: "PATCH /api/v1/admin/productos/:id/activar and /desactivar — Toggle a product's visibility in the store without deleting it from the database."
+---
+
+The Balsamoa Backend implements a soft-delete pattern through the `activo` boolean column on the `productos` table. Rather than permanently removing a product, you can toggle its visibility with two dedicated `PATCH` endpoints. This approach preserves all historical sales records, variant data, and images while hiding the product from shoppers. It is the recommended way to remove a product from the storefront when it has existing orders, when you want to bring it back in the future, or when you simply need to take it temporarily offline.
+
+---
+
+## PATCH /api/v1/admin/productos/:id/activar
+
+Sets `activo = true` on the product row, making it visible again in the public store. This is the reverse of deactivation and can be called any number of times.
+
+### Request
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/admin/productos/:id/activar`  
+**Request body:** none
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the product to activate.
+</ParamField>
+
+```bash
+curl -X PATCH http://localhost:3000/api/v1/admin/productos/6/activar \
+  -H "Accept: application/json"
+```
+
+### Response — 200 Success
+
+```json
+{
+  "mensaje": "Producto agregado exitosamente (alta lógica)",
+  "producto": [
+    {
+      "id": 6,
+      "nombre": "Hoodie Beige Guardapampa",
+      "descripcion": "Buzo de cuello redondo (sin capucha) en color beige.",
+      "precio": "45000.00",
+      "categoria_id": 1,
+      "destacado": false,
+      "activo": true,
+      "fecha_creacion": "2024-11-01T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+<ResponseField name="mensaje" type="string">
+  Confirmation that the product was re-activated.
+</ResponseField>
+
+<ResponseField name="producto" type="array">
+  Array containing the updated raw product row returned by `UPDATE … RETURNING *`. The `activo` field will be `true`.
+</ResponseField>
+
+---
+
+## PATCH /api/v1/admin/productos/:id/desactivar
+
+Sets `activo = false` on the product row, immediately hiding it from all public store endpoints. The product remains fully accessible through admin endpoints and all its data — images, variants, and order history — is preserved.
+
+### Request
+
+**Method:** `PATCH`  
+**Path:** `/api/v1/admin/productos/:id/desactivar`  
+**Request body:** none
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the product to deactivate.
+</ParamField>
+
+```bash
+curl -X PATCH http://localhost:3000/api/v1/admin/productos/6/desactivar \
+  -H "Accept: application/json"
+```
+
+### Response — 200 Success
+
+```json
+{
+  "mensaje": "Producto eliminado exitosamente (baja lógica)",
+  "producto": [
+    {
+      "id": 6,
+      "nombre": "Hoodie Beige Guardapampa",
+      "descripcion": "Buzo de cuello redondo (sin capucha) en color beige.",
+      "precio": "45000.00",
+      "categoria_id": 1,
+      "destacado": false,
+      "activo": false,
+      "fecha_creacion": "2024-11-01T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+<ResponseField name="mensaje" type="string">
+  Confirmation that the product was deactivated (soft-deleted).
+</ResponseField>
+
+<ResponseField name="producto" type="array">
+  Array containing the updated raw product row returned by `UPDATE … RETURNING *`. The `activo` field will be `false`.
+</ResponseField>
+
+---
+
+## Error Cases
+
+Both endpoints share the same error behavior.
+
+| Status | Condition | Response body |
+|--------|-----------|---------------|
+| `400` | `id` path parameter is not a valid number | `{"mensaje": "El ID del producto debe ser un número válido"}` |
+| `404` | No product exists with the given `id` | `{"mensaje": "Producto no encontrado"}` |
+| `500` | Unexpected database or server error | `{"mensaje": "Error al activar el producto"}` or `{"mensaje": "Error al desactivar el producto"}` |
+
+<Tip>
+  Deactivated products (`activo = false`) are **invisible to the public store**. The endpoints `GET /api/v1/tienda/productos` and `GET /api/v1/tienda/productos/:id` both filter on `activo = true`, so deactivated products are never returned to shoppers. Admin endpoints (`GET /api/v1/admin/productos` and `GET /api/v1/admin/productos/:id`) query `vista_catalogo_productos` without any `activo` filter, so deactivated products remain fully visible and editable in the back office.
+</Tip>

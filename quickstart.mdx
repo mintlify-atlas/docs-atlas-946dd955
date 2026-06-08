@@ -1,47 +1,156 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Balsamoa Backend in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Clone the Balsamoa Backend, set up your Supabase database, configure environment variables, and run the development server in five minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+This guide walks you through getting a fully functional local instance of Balsamoa Backend running from scratch. By the end you will have the Express server running, the PostgreSQL schema applied to Supabase, and the public store API responding to requests.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+<Note>
+  **Prerequisites** before you begin:
+  - **Node.js 18 or later** installed on your machine.
+  - **pnpm** installed globally (`npm install -g pnpm`).
+  - A **Supabase project** with a PostgreSQL database. You can create one for free at [supabase.com](https://supabase.com).
+</Note>
 
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+## Setup steps
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Clone the repository">
+    Clone the Balsamoa Backend repository from GitHub and change into the project directory.
 
     ```bash
-    npm install your-package
+    git clone https://github.com/MateoNavarroMN/Balsamoa-Backend.git
+    cd Balsamoa-Backend
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+  <Step title="Install dependencies">
+    Install all runtime and development dependencies. The project uses pnpm as its primary package manager, but npm and yarn work equally well.
+
+    <CodeGroup>
+      ```bash pnpm
+      pnpm install
+      ```
+
+      ```bash npm
+      npm install
+      ```
+
+      ```bash yarn
+      yarn install
+      ```
+    </CodeGroup>
+
+    This installs Express 5, the `pg` PostgreSQL driver, Multer, dotenv, and nodemon.
+  </Step>
+
+  <Step title="Configure environment variables">
+    The environment template lives in `inicializar/.env.example`. Copy it to a `.env` file at the root of the project (next to `package.json`) and fill in your values.
 
     ```bash
-    your-cli init
+    cp inicializar/.env.example .env
+    ```
+
+    Open `.env` and update the two variables:
+
+    ```bash .env
+    # Use Supabase's transaction pooler — change port 5432 to 6543
+    DATABASE_URL=postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+
+    # HTTP port the server listens on (defaults to 3000 if omitted)
+    PUERTO=3000
+    ```
+
+    <Tip>
+      The `DATABASE_URL` **must** use port **6543** (Supabase's transaction pooler), not the direct port 5432. Using port 5432 works for persistent connections but will exhaust the database connection limit quickly in development and will fail on serverless platforms like Vercel.
+    </Tip>
+  </Step>
+
+  <Step title="Initialize the database">
+    The file `inicializar/balsamoa.sql` contains the complete schema (tables, views, sequences) and seed data. You need to run it once against your Supabase database.
+
+    **Option A — Supabase SQL Editor (recommended for beginners):**
+
+    1. Open your Supabase project dashboard.
+    2. Navigate to **SQL Editor** in the left sidebar.
+    3. Click **New query**, paste the full contents of `inicializar/balsamoa.sql`, and click **Run**.
+
+    **Option B — psql CLI:**
+
+    ```bash
+    psql "postgresql://postgres.[project-ref]:[password]@db.[project-ref].supabase.co:5432/postgres" \
+      -f inicializar/balsamoa.sql
+    ```
+
+    <Note>
+      Use the **direct connection string** (port 5432) when running `psql` for schema migrations — the pooler (port 6543) does not support session-level commands like `setval`.
+    </Note>
+  </Step>
+
+  <Step title="Start the development server">
+    Run the dev script to start Express with nodemon. The server will restart automatically whenever you save a source file.
+
+    <CodeGroup>
+      ```bash pnpm (dev — auto-reload)
+      pnpm dev
+      ```
+
+      ```bash pnpm (start — no auto-reload)
+      pnpm start
+      ```
+
+      ```bash npm
+      npm run dev
+      ```
+    </CodeGroup>
+
+    On a successful start you will see:
+
+    ```
+    Servidor corriendo en http://localhost:3000
+    Panel de Admin http://localhost:3000/admin
     ```
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Verify the server is working">
+    Hit the public products endpoint and open the admin panel to confirm everything is wired up correctly.
 
     ```bash
-    your-cli start
+    # List all public products
+    curl http://localhost:3000/api/v1/tienda/productos
+
+    # Fetch a single product by ID
+    curl http://localhost:3000/api/v1/tienda/productos/1
     ```
+
+    You should receive a JSON array of products with their variants, images, and stock data. Then open the admin panel in your browser:
+
+    ```
+    http://localhost:3000/admin
+    ```
+
+    The admin dashboard should load, allowing you to create, edit, and manage products and inventory.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## What's running
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+Once the server starts, Express serves three separate static frontends alongside the API — all from the same process and port:
+
+| Route | Source folder | Purpose |
+|---|---|---|
+| `/recursos` | `src/public/recursos/` | Shared static assets: CSS, JavaScript, fonts, and product images |
+| `/admin` | `src/public/admin/` | Admin panel HTML application for store management |
+| `/` | `src/public/tienda/` | Public-facing store frontend HTML pages |
+
+The API routes registered by each module are layered on top of these static routes, so `/api/v1/...` paths are handled by Express routers before the static middleware can intercept them.
+
+<Note>
+  The `balsamoa.sql` seed script pre-loads a complete starting dataset so you can explore the API immediately after setup:
+
+  - **10 products** across two categories (Hoodies and Remeras), each with a product image.
+  - **5 sizes** — S, M, L, XL, XXL — ordered for display.
+  - **8 colors** — Blanco, Negro, Verde, Beige, Azul, Gris Claro, Gris Oscuro, Marrón — each with a hex value.
+  - **Variant stock entries** covering a range of scenarios: fully stocked, low stock, out-of-stock, and single-size products.
+</Note>

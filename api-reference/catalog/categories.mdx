@@ -1,0 +1,65 @@
+---
+title: "GET /api/v1/admin/categorias — List Product Categories"
+sidebarTitle: "Categories"
+description: "GET /api/v1/admin/categorias — Returns all available product categories. Use the returned IDs as categoria_id when creating or updating products."
+---
+
+Product categories define the top-level groupings available in the Balsamoa store. Every product must belong to exactly one category, identified by its `id`. This endpoint returns all category records seeded in the database so you can populate a category selector before creating or updating a product.
+
+## Request
+
+| Property | Value                          |
+|----------|--------------------------------|
+| Method   | `GET`                          |
+| Path     | `/api/v1/admin/categorias`     |
+
+No query parameters or request body are required.
+
+### Example
+
+```bash
+curl https://your-api.com/api/v1/admin/categorias
+```
+
+## Response
+
+**200 OK** — An array of category objects ordered by database insertion (ascending `id`).
+
+```json
+[
+  {
+    "id": 1,
+    "nombre": "Hoodie",
+    "descripcion": "Buzos de alta calidad con y sin capucha"
+  },
+  {
+    "id": 2,
+    "nombre": "Remera",
+    "descripcion": "Remeras de algodón premium"
+  }
+]
+```
+
+### Response Fields
+
+<ResponseField name="id" type="integer">
+  The unique numeric identifier for the category. Pass this value as `categoria_id` in product create and update requests.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  The display name of the category (e.g., `"Hoodie"`, `"Remera"`).
+</ResponseField>
+
+<ResponseField name="descripcion" type="string">
+  A short human-readable description of the category. May be `null` if no description was provided.
+</ResponseField>
+
+## Error Cases
+
+| Status | Cause                                     | Response body                               |
+|--------|-------------------------------------------|---------------------------------------------|
+| `404`  | The `categorias` table contains no rows   | `{"mensaje": "Registros no encontrados"}`   |
+
+<Tip>
+  Call this endpoint first when building a product creation or editing form to dynamically populate the category dropdown. The `id` values are stable — they are set by the SQL seed script and the sequences are updated accordingly, so IDs will not shift after new categories are inserted.
+</Tip>

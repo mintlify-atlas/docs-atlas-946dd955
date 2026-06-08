@@ -1,0 +1,96 @@
+---
+title: "POST /api/v1/admin/imagenes/subir — Upload a Product Image"
+sidebarTitle: "Upload Image"
+description: "POST /api/v1/admin/imagenes/subir — Accepts a multipart/form-data file upload (max 5 MB, JPEG/PNG/WebP/GIF) and returns the public URL path for use in product creation."
+---
+
+Images must be uploaded to the server before they can be associated with a product. This endpoint accepts a single file via `multipart/form-data`, saves it to disk, and returns a public URL path. That URL is then passed inside the `imagenes` array when calling the create or update product endpoints.
+
+## Request
+
+| Property     | Value                             |
+|--------------|-----------------------------------|
+| Method       | `POST`                            |
+| Path         | `/api/v1/admin/imagenes/subir`    |
+| Content-Type | `multipart/form-data`             |
+
+### Body
+
+<ParamField body="imagen" type="file" required>
+  The image file to upload. Must be sent as a form field named exactly `imagen`.
+</ParamField>
+
+### Constraints
+
+- **Maximum file size:** 5 MB. Requests exceeding this limit are rejected with a `400` error.
+- **Accepted MIME types:** `image/jpeg`, `image/png`, `image/webp`, `image/gif`. Any other type is rejected with `TIPO_INVALIDO`.
+- **Storage location:** Files are saved to the server's local filesystem under `/recursos/imagenes/productos/`.
+- **Filename sanitization:** Spaces in the original filename are replaced with underscores (`_`), and a Unix millisecond timestamp is prepended (e.g., `1700000000000_remera_blanca.webp`).
+
+### Example
+
+```bash
+curl -X POST https://your-api.com/api/v1/admin/imagenes/subir \
+  --form "imagen=@/path/to/remera.webp"
+```
+
+## Response
+
+**201 Created**
+
+```json
+{
+  "mensaje": "Imagen subida exitosamente",
+  "url": "/recursos/imagenes/productos/1700000000000_remera.webp",
+  "filename": "1700000000000_remera.webp"
+}
+```
+
+<ResponseField name="mensaje" type="string">
+  Human-readable confirmation message.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  The public URL path for this image. Store this value and include it in the `imagenes` array when creating or updating a product.
+</ResponseField>
+
+<ResponseField name="filename" type="string">
+  The sanitized filename as saved on disk, including the timestamp prefix.
+</ResponseField>
+
+## Error Cases
+
+| Status | Cause                                                           | Response body                                          |
+|--------|-----------------------------------------------------------------|--------------------------------------------------------|
+| `400`  | File exceeds 5 MB (`LIMIT_FILE_SIZE`)                           | `{"mensaje": "El archivo supera el límite de 5 MB"}`   |
+| `400`  | MIME type not in the allowed list (`TIPO_INVALIDO`)             | `{"mensaje": "Solo se aceptan imágenes (jpg, png, webp, gif)"}` |
+| `400`  | No file field received in the request                           | `{"mensaje": "No se recibió ningún archivo"}`          |
+
+<Warning>
+  **Ephemeral disk on Vercel.** This endpoint writes files to the local filesystem (`/public/recursos/imagenes/productos/`). Vercel's serverless runtime uses an ephemeral filesystem — files written during one request are not guaranteed to persist across function invocations or deployments. For production use, replace the Multer disk storage configuration with a cloud storage provider such as Cloudinary, AWS S3, or Supabase Storage, and store the resulting CDN URL instead.
+</Warning>
+
+## Typical Workflow
+
+<Steps>
+  <Step title="Upload the image">
+    Send a `POST` request to `/api/v1/admin/imagenes/subir` with the image file attached as the `imagen` form field. The server saves the file and returns a `url` such as `/recursos/imagenes/productos/1700000000000_remera.webp`.
+  </Step>
+  <Step title="Copy the returned URL">
+    Save the `url` value from the response. You will need it in the next step.
+  </Step>
+  <Step title="Include the URL in a product request">
+    Pass the URL inside the `imagenes` array when calling `POST /api/v1/admin/productos` (create) or `PUT /api/v1/admin/productos/:id` (update):
+
+    ```json
+    {
+      "nombre": "Remera Blanca Guardapampa",
+      "precio": 30000,
+      "categoria_id": 2,
+      "imagenes": [
+        { "url": "/recursos/imagenes/productos/1700000000000_remera.webp", "orden": 1 }
+      ]
+    }
+    ```
+  </Step>
+</Steps>

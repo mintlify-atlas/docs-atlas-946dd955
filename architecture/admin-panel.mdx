@@ -1,0 +1,126 @@
+---
+title: "Admin Panel: Manage Your Product Catalog"
+sidebarTitle: "Admin Panel"
+description: "The Balsamoa admin panel at /admin lets you create, edit, activate, deactivate, and delete products, upload images, and manage variants — all from a built-in web interface."
+---
+
+The Balsamoa admin panel is a single-page HTML interface served directly by the Express backend at `/admin`. It communicates with the admin API endpoints (`/api/v1/admin/...`) using `fetch`, so no separate frontend build step or deployment is required. The panel is the primary tool for managing the product catalog — creating new products, editing existing ones, uploading images, assigning variants, and controlling visibility on the storefront.
+
+## Accessing the panel
+
+The panel is served as a static file from `src/public/admin/`. When the server starts you will see the URL printed to the terminal:
+
+```
+Panel de Admin http://localhost:3000/admin
+```
+
+Open that URL in any modern browser to access the interface. In a production deployment, substitute `localhost:3000` with your server's domain or IP.
+
+<Note>
+  The admin panel currently has no authentication. Any user who can reach `/admin` has full read and write access to the catalog. For production use, restrict the `/admin` route with server-level auth (e.g. HTTP Basic Auth in Nginx) or a reverse proxy rule before exposing the server to the internet.
+</Note>
+
+## Catalog management
+
+The **Catálogo de productos** section is the default view when the panel loads. It displays all products — both active and inactive — in a sortable table with the following columns:
+
+| Column | Description |
+|---|---|
+| **Producto** | Product name and thumbnail image |
+| **Categoría** | Category name (e.g. Hoodie, Remera) |
+| **Precio** | Unit price in ARS |
+| **Stock por talle** | Per-size stock breakdown rendered as inline badges |
+| **Colores** | Color swatches rendered from the `colores_hex` array |
+| **Stock total** | Sum of all variant stock values |
+| **Destacado** | Featured flag indicator |
+| **Acciones** | Edit, activate/deactivate, and delete buttons |
+
+Above the table, a **filter bar** lets you narrow the list in real time without a page reload:
+
+- **Categoría** — filter by Remera, Hoodie, Campera, or Pantalón
+- **Destacado** — show only featured products, only non-featured, or all
+- **Estado** — show only active products, only inactive, or both
+
+## Creating a product
+
+<Steps>
+  <Step title="Open the product form">
+    Click the **Nuevo producto** button in the top-right corner of the catalog section. A modal dialog opens with all creation fields.
+  </Step>
+  <Step title="Fill in the basic information">
+    Enter the product's **name** (required), an optional **description**, select a **category** from the dropdown (populated from `GET /api/v1/admin/categorias`), and enter a **price** in ARS (required, must be a positive number).
+  </Step>
+  <Step title="Set visibility flags">
+    Check **Destacado** to mark the product as featured so it appears in the store's highlighted section. The **Activo** checkbox is ticked by default — uncheck it to create the product in a hidden (inactive) state.
+  </Step>
+  <Step title="Add images">
+    Upload each image file using the **Agregar imagen** button. Each file is sent immediately to `POST /api/v1/admin/imagenes/subir`, which stores it on disk and returns a public URL. That URL is then displayed in the image row. You can add up to 6 images; the first image in the list (lowest order) becomes the principal image shown in catalog listings.
+  </Step>
+  <Step title="Select sizes">
+    The **Talles disponibles** section renders a chip for every size loaded from `GET /api/v1/admin/talles`. Click one or more chips to toggle the sizes you want to offer for this product.
+  </Step>
+  <Step title="Select colors">
+    The **Colores disponibles** section renders a chip for every color loaded from `GET /api/v1/admin/colores`. Click one or more chips to toggle the colors available for this product.
+  </Step>
+  <Step title="Set stock per variant">
+    Once at least one size and one color are selected, the **Stock por variante** section auto-generates an input row for every size × color combination. Enter the available stock for each combination. Combinations with zero stock will be saved and will show as "Agotado" on the storefront.
+  </Step>
+  <Step title="Save the product">
+    Click **Guardar Producto**. The panel sends a `POST /api/v1/admin/productos` request with the product data, image URLs, and variant array in a single JSON payload. On success a toast notification confirms the creation and the table refreshes automatically.
+  </Step>
+</Steps>
+
+## Image workflow
+
+Images are managed through a two-step process that keeps file storage and database records in sync.
+
+**Step 1 — Upload the file.** When you click "Agregar imagen" and select a file, the panel sends it as `multipart/form-data` to:
+
+```
+POST /api/v1/admin/imagenes/subir
+```
+
+The server uses Multer to write the file to `src/public/recursos/imagenes/productos/` with a timestamped filename. A successful upload returns:
+
+```json
+{
+  "mensaje": "Imagen subida exitosamente",
+  "url": "/recursos/imagenes/productos/1718200000000_hoodie_verde.webp",
+  "filename": "1718200000000_hoodie_verde.webp"
+}
+```
+
+**Step 2 — Associate the URL with the product.** The returned `url` value is stored in the image row inside the product form. When you save the product, this URL is included in the `imagenes` array of the product payload and inserted into `producto_imagenes`.
+
+<Tip>
+  If you cancel a product creation after uploading images, the files will remain on disk. Use `DELETE /api/v1/admin/imagenes/:id` to remove orphaned image records and their corresponding disk files.
+</Tip>
+
+Accepted file formats are `image/jpeg`, `image/png`, `image/webp`, and `image/gif`. The maximum file size is **5 MB** per image.
+
+## Variant management
+
+Sizes and colors are not hardcoded in the panel — they are loaded dynamically from the catalog APIs each time the product modal opens:
+
+- `GET /api/v1/admin/talles` — returns all available sizes
+- `GET /api/v1/admin/colores` — returns all available colors
+
+Each size and color is rendered as a selectable chip. Selecting a size or color immediately recalculates the stock grid. Every unique **size × color** pair that results from the current selection becomes one row in the stock table, with a number input for that variant's stock level.
+
+When the product is saved, each row in the stock grid becomes one entry in the `variantes` array:
+
+```json
+{
+  "variantes": [
+    { "talle_id": 1, "color_id": 3, "stock": 15 },
+    { "talle_id": 2, "color_id": 3, "stock": 15 },
+    { "talle_id": 3, "color_id": 3, "stock": 15 }
+  ]
+}
+```
+
+When **editing** an existing product, the panel uses upsert logic on the server (`ON CONFLICT (producto_id, talle_id, color_id) DO UPDATE SET ...`), so adding a new size to an existing product creates new variant rows without touching the ones already in the database.
+
+## Theme support
+
+The admin panel supports a **light/dark theme toggle** accessible from the sidebar footer. Clicking the moon/sun icon in the bottom-left corner of the sidebar calls `alternarTema()`, which flips the `data-theme` attribute on the `<html>` element between `"light"` and `"dark"`. All colors in `admin.css` are defined as CSS custom properties that respond to this attribute, so the entire interface switches instantly without a page reload.

@@ -1,0 +1,157 @@
+---
+title: "PUT /api/v1/admin/productos/:id — Update a Product"
+sidebarTitle: "Update Product"
+description: "PUT /api/v1/admin/productos/:id — Updates product fields, replaces images (delete+insert), and upserts variants in a single atomic transaction."
+---
+
+This endpoint performs a full product update inside a single database transaction. All fields in the request body are optional — any field you omit is preserved using `COALESCE` in the SQL `UPDATE` statement, so you can safely send only the fields you want to change without clearing the others. Image replacement uses a delete-and-reinsert strategy: if you include the `imagenes` array, **all existing images are deleted** and the new list is inserted in their place. Files that were removed from the list are also deleted from disk. Variants are synchronized using an upsert: new combinations are inserted and existing ones are updated in place.
+
+## Request
+
+**Method:** `PUT`  
+**Path:** `/api/v1/admin/productos/:id`  
+**Content-Type:** `application/json`
+
+### Path Parameter
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the product to update. Must match an existing product row.
+</ParamField>
+
+### Body Parameters
+
+All fields are optional. Omitted fields retain their current database values.
+
+<ParamField body="nombre" type="string">
+  New display name for the product.
+</ParamField>
+
+<ParamField body="descripcion" type="string">
+  New product description. Pass `null` explicitly to clear an existing description.
+</ParamField>
+
+<ParamField body="precio" type="number">
+  New price in ARS. Must be a non-negative number if provided.
+</ParamField>
+
+<ParamField body="categoria_id" type="integer">
+  New category ID. Must reference an existing row in the `categorias` table.
+</ParamField>
+
+<ParamField body="destacado" type="boolean">
+  Whether the product should be marked as featured.
+</ParamField>
+
+<ParamField body="activo" type="boolean">
+  Whether the product should be visible in the public store. Prefer the dedicated `/activar` and `/desactivar` endpoints for toggling visibility alone.
+</ParamField>
+
+<ParamField body="imagenes" type="array">
+  Complete replacement image list. When this field is present, all current images are deleted from the database and from disk (except those whose URL also appears in the new list), and the new list is inserted. When this field is **omitted**, existing images are left untouched.
+
+  <Expandable title="imagen item">
+    <ParamField body="url" type="string" required>
+      Public path to the image file. To retain an existing image, include its URL in this list; if it is absent, the file will be deleted from disk.
+    </ParamField>
+    <ParamField body="orden" type="integer">
+      Display order. Lower values appear first. Defaults to `1` if omitted.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="variantes" type="array">
+  Variant synchronization list. Uses `ON CONFLICT (producto_id, talle_id, color_id) DO UPDATE` — existing combinations have their `stock` and `activo` updated; new combinations are inserted. Omitting this field leaves all existing variants unchanged.
+
+  <Expandable title="variante item">
+    <ParamField body="talle_id" type="integer" required>
+      Foreign key referencing the `talles` table.
+    </ParamField>
+    <ParamField body="color_id" type="integer" required>
+      Foreign key referencing the `colores` table.
+    </ParamField>
+    <ParamField body="stock" type="integer">
+      Updated stock count for this size/color combination. Defaults to `0`.
+    </ParamField>
+    <ParamField body="activo" type="boolean">
+      Whether this variant is purchasable. Defaults to `true`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Variant Upsert Behavior
+
+The variant sync uses PostgreSQL's `ON CONFLICT` clause targeting the unique constraint on `(producto_id, talle_id, color_id)`:
+
+- If the combination **does not exist**, a new row is inserted.
+- If the combination **already exists**, only `stock` and `activo` are updated — the `producto_id`, `talle_id`, and `color_id` remain unchanged.
+- Variants that exist in the database but are **not included** in the new `variantes` array are left untouched. To remove a variant, set its `stock` to `0` and `activo` to `false`.
+
+### Image Update Behavior
+
+When the `imagenes` field is provided:
+
+1. The controller first fetches all current image records for the product.
+2. Any image whose `url` does **not** appear in the new `imagenes` array is added to a deletion queue.
+3. The model deletes **all** existing `producto_imagenes` rows for the product and inserts the new list.
+4. After the database transaction commits, the controller deletes the queued image files from disk using `fs.unlinkSync`.
+
+When `imagenes` is **omitted entirely**, no images are touched.
+
+```bash
+curl -X PUT http://localhost:3000/api/v1/admin/productos/5 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "precio": 38000,
+    "destacado": true,
+    "variantes": [
+      { "talle_id": 1, "color_id": 3, "stock": 18, "activo": true },
+      { "talle_id": 2, "color_id": 3, "stock": 20, "activo": true },
+      { "talle_id": 3, "color_id": 3, "stock": 20, "activo": true },
+      { "talle_id": 4, "color_id": 3, "stock": 10, "activo": true }
+    ]
+  }'
+```
+
+## Response
+
+### 200 — Updated
+
+Returns a `mensaje` string and a `producto` object. The `producto` is the raw row from the `productos` table as returned by `RETURNING *` — not the enriched view object. Use `GET /api/v1/admin/productos/:id` to retrieve the full denormalized record after updating.
+
+```json
+{
+  "mensaje": "Producto actualizado exitosamente",
+  "producto": {
+    "id": 5,
+    "nombre": "Remera Verde Woke UP",
+    "descripcion": "Remera verde oscuro, con logo dorado en el pecho.",
+    "precio": "38000.00",
+    "categoria_id": 2,
+    "destacado": true,
+    "activo": true,
+    "fecha_creacion": "2024-11-01T10:00:00.000Z"
+  }
+}
+```
+
+<ResponseField name="mensaje" type="string">
+  Human-readable confirmation string.
+</ResponseField>
+
+<ResponseField name="producto" type="object">
+  The updated raw row from the `productos` table, returned by `RETURNING *`.
+</ResponseField>
+
+## Error Cases
+
+| Status | Condition | Response body |
+|--------|-----------|---------------|
+| `400` | `id` path parameter is not a valid number | `{"mensaje": "El ID del producto debe ser un número válido"}` |
+| `400` | `precio` is provided but is negative or non-numeric | `{"mensaje": "El precio debe ser un número positivo"}` |
+| `400` | `imagenes` is provided but is not an array | `{"mensaje": "El campo \"imagenes\" debe ser un arreglo"}` |
+| `400` | An image object is missing its `url` | `{"mensaje": "Cada imagen debe tener un campo \"url\" válido"}` |
+| `400` | `variantes` is provided but is not an array | `{"mensaje": "El campo \"variantes\" debe ser un arreglo"}` |
+| `400` | A variant is missing `talle_id` or `color_id` | `{"mensaje": "Cada variante debe tener \"talle_id\" y \"color_id\""}` |
+| `400` | A variant's `stock` is negative | `{"mensaje": "El stock de cada variante debe ser un número no negativo"}` |
+| `404` | No product exists with the given `id` | `{"mensaje": "Producto no encontrado"}` |
+| `500` | Unexpected database or server error | `{"mensaje": "Error al actualizar el producto"}` |

@@ -1,0 +1,164 @@
+---
+title: "GET /api/v1/admin/productos/:id — Get Product by ID"
+sidebarTitle: "Get Product"
+description: "GET /api/v1/admin/productos/:id — Returns a single product from the catalog view by its numeric ID, including all variants, images, and stock data."
+---
+
+This endpoint retrieves a single product record from the `vista_catalogo_productos` view filtered by its numeric primary key. It returns the same fully denormalized schema as the list endpoint, making it suitable for populating product edit forms in the admin panel. Unlike the public store equivalent, this endpoint returns the product regardless of its `activo` status, so deactivated products are always accessible here.
+
+## Request
+
+**Method:** `GET`  
+**Path:** `/api/v1/admin/productos/:id`  
+**Request body:** none
+
+### Path Parameter
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the product to retrieve. Must be a positive integer that matches an existing row in the `productos` table.
+</ParamField>
+
+```bash
+curl -X GET http://localhost:3000/api/v1/admin/productos/3 \
+  -H "Accept: application/json"
+```
+
+## Response
+
+### 200 — Success
+
+Returns the product object directly (not wrapped in an array). The schema is identical to a single element from the [List Products](/api-reference/products/list) response.
+
+```json
+{
+  "id": 3,
+  "nombre": "Hoodie Basic Verde",
+  "descripcion": "Buzo con capucha verde oliva o militar.",
+  "categoria_id": 1,
+  "categoria": "Hoodie",
+  "precio": "40000.00",
+  "destacado": true,
+  "activo": true,
+  "fecha_creacion": "2024-11-01T10:00:00.000Z",
+  "imagen_principal": "/recursos/imagenes/productos/Hoodie Basic Verde.webp",
+  "stock_total": 45,
+  "stock_por_talle": [
+    { "talle": "S", "cantidad": 15 },
+    { "talle": "M", "cantidad": 15 },
+    { "talle": "L", "cantidad": 15 }
+  ],
+  "colores_hex": ["#4A5D23"],
+  "imagenes": [
+    { "url": "/recursos/imagenes/productos/Hoodie Basic Verde.webp", "orden": 1 }
+  ],
+  "talle_ids": [1, 2, 3],
+  "color_ids": [3],
+  "variantes": [
+    { "talle_id": 1, "color_id": 3, "stock": 15, "activo": true },
+    { "talle_id": 2, "color_id": 3, "stock": 15, "activo": true },
+    { "talle_id": 3, "color_id": 3, "stock": 15, "activo": true }
+  ]
+}
+```
+
+<ResponseField name="id" type="integer">
+  Unique numeric identifier for the product.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Display name of the product.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string | null">
+  Optional free-text description. `null` if not set.
+</ResponseField>
+
+<ResponseField name="categoria_id" type="integer">
+  Foreign key referencing the `categorias` table.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  Human-readable category name joined from the `categorias` table.
+</ResponseField>
+
+<ResponseField name="precio" type="string">
+  Product price in ARS as a decimal string with two places (e.g. `"40000.00"`).
+</ResponseField>
+
+<ResponseField name="destacado" type="boolean">
+  Whether the product is marked as featured.
+</ResponseField>
+
+<ResponseField name="activo" type="boolean">
+  Whether the product is publicly visible in the store. Deactivated products (`false`) are still returned by this admin endpoint.
+</ResponseField>
+
+<ResponseField name="fecha_creacion" type="string">
+  ISO 8601 timestamp of when the product row was inserted.
+</ResponseField>
+
+<ResponseField name="imagen_principal" type="string | null">
+  Public URL of the image with the lowest `orden` value. `null` if no images have been attached.
+</ResponseField>
+
+<ResponseField name="stock_total" type="integer">
+  Sum of `stock` across all variants of this product.
+</ResponseField>
+
+<ResponseField name="stock_por_talle" type="array">
+  Aggregated stock per size. Each element has `talle` (label) and `cantidad` (total units across all colors).
+
+  <Expandable title="stock_por_talle item">
+    <ResponseField name="talle" type="string">
+      Size label (`"S"`, `"M"`, `"L"`, `"XL"`, `"XXL"`).
+    </ResponseField>
+    <ResponseField name="cantidad" type="integer">
+      Total units available for this size across all color variants.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="colores_hex" type="array">
+  Flat array of unique hex color codes for all variants (e.g. `["#4A5D23"]`).
+</ResponseField>
+
+<ResponseField name="imagenes" type="array">
+  All product images ordered by `orden` ascending. Each element contains `url` and `orden`.
+</ResponseField>
+
+<ResponseField name="talle_ids" type="array">
+  Sorted array of `talle_id` integers that appear in this product's variants.
+</ResponseField>
+
+<ResponseField name="color_ids" type="array">
+  Sorted array of `color_id` integers that appear in this product's variants.
+</ResponseField>
+
+<ResponseField name="variantes" type="array">
+  Full variant matrix with `talle_id`, `color_id`, `stock`, and `activo` per combination.
+
+  <Expandable title="variante item">
+    <ResponseField name="talle_id" type="integer">
+      Foreign key referencing the `talles` table.
+    </ResponseField>
+    <ResponseField name="color_id" type="integer">
+      Foreign key referencing the `colores` table.
+    </ResponseField>
+    <ResponseField name="stock" type="integer">
+      Units available for this size/color combination.
+    </ResponseField>
+    <ResponseField name="activo" type="boolean">
+      Whether this variant is available for purchase.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### 400 — Product Not Found
+
+Returned when no row with the given `id` exists in the `vista_catalogo_productos` view.
+
+```json
+{
+  "mensaje": "Producto no encontrado"
+}
+```

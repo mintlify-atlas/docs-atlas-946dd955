@@ -1,0 +1,60 @@
+---
+title: "GET /api/v1/admin/talles — List Available Sizes"
+sidebarTitle: "Sizes"
+description: "GET /api/v1/admin/talles — Returns all size options (talles) ordered by the orden field. Use talle_id values when defining product variants."
+---
+
+Sizes (talles) represent the physical size options available for Balsamoa products. Each product variant is defined by a combination of a size ID and a color ID. Retrieve the full list of sizes from this endpoint to populate a size picker or to build the `variantes` array when creating or updating a product.
+
+## Request
+
+| Property | Value                      |
+|----------|----------------------------|
+| Method   | `GET`                      |
+| Path     | `/api/v1/admin/talles`     |
+
+No query parameters or request body are required.
+
+### Example
+
+```bash
+curl https://your-api.com/api/v1/admin/talles
+```
+
+## Response
+
+**200 OK** — An array of size objects, sorted by the `orden` field in ascending order.
+
+```json
+[
+  { "id": 1, "nombre": "S",   "orden": 1 },
+  { "id": 2, "nombre": "M",   "orden": 2 },
+  { "id": 3, "nombre": "L",   "orden": 3 },
+  { "id": 4, "nombre": "XL",  "orden": 4 },
+  { "id": 5, "nombre": "XXL", "orden": 5 }
+]
+```
+
+### Response Fields
+
+<ResponseField name="id" type="integer">
+  The unique numeric identifier for this size. Pass this value as `talle_id` inside each object of the `variantes` array when creating or updating a product.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  The human-readable size label (e.g., `"S"`, `"M"`, `"XL"`).
+</ResponseField>
+
+<ResponseField name="orden" type="integer">
+  A numeric sort key used to determine the display order of sizes in both the admin panel and the public store frontend. Lower values appear first.
+</ResponseField>
+
+## Error Cases
+
+| Status | Cause                                  | Response body                               |
+|--------|----------------------------------------|---------------------------------------------|
+| `404`  | The `talles` table contains no rows    | `{"mensaje": "Registros no encontrados"}`   |
+
+<Note>
+  The `orden` field is the canonical source of truth for size ordering across the entire application. The database view `vista_catalogo_productos` uses `ORDER BY t.orden` when aggregating `stock_por_talle`, so size objects on product responses always appear in the same sequence as returned by this endpoint.
+</Note>

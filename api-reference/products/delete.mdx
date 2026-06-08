@@ -1,0 +1,73 @@
+---
+title: "DELETE /api/v1/admin/productos/:id — Permanently Delete a Product"
+sidebarTitle: "Delete Product"
+description: "DELETE /api/v1/admin/productos/:id — Permanently removes a product from the database and deletes all associated image files from disk."
+---
+
+This endpoint issues a physical `DELETE FROM productos WHERE id = $1` against the database. Because the `producto_imagenes` and `variantes` tables define `ON DELETE CASCADE` on their `producto_id` foreign keys, all associated image records and variant rows are automatically removed in the same operation. After the database confirms the deletion, the controller iterates over the product's image URLs and removes each file from disk using `fs.unlinkSync`. This operation cannot be undone — there is no recycle bin or soft-delete recovery path.
+
+## Request
+
+**Method:** `DELETE`  
+**Path:** `/api/v1/admin/productos/:id`  
+**Request body:** none
+
+### Path Parameter
+
+<ParamField path="id" type="integer" required>
+  The numeric ID of the product to permanently delete. Must be a positive integer.
+</ParamField>
+
+<Warning>
+  This action is **irreversible**. The product row, all its variants, all its image records, and all associated image files on disk are permanently destroyed. If the product has been referenced in any order line (`detalles_pedido`), PostgreSQL will reject the deletion with a foreign key violation (error code `23503`) and the API returns `409 Conflict`. In that case, use `PATCH /api/v1/admin/productos/:id/desactivar` to hide the product from the store without losing historical sales data.
+</Warning>
+
+```bash
+curl -X DELETE http://localhost:3000/api/v1/admin/productos/11 \
+  -H "Accept: application/json"
+```
+
+## Response
+
+### 200 — Deleted
+
+Returns a confirmation message and the raw product row that was deleted, as returned by PostgreSQL's `RETURNING *`.
+
+```json
+{
+  "mensaje": "Producto eliminado definitivamente de la base de datos",
+  "producto": [
+    {
+      "id": 11,
+      "nombre": "Hoodie Basic Marrón",
+      "descripcion": "Buzo con capucha en tono marrón oscuro. Pequeño logo bordado en el pecho.",
+      "precio": "40000.00",
+      "categoria_id": 1,
+      "destacado": false,
+      "activo": true,
+      "fecha_creacion": "2024-11-15T14:30:00.000Z"
+    }
+  ]
+}
+```
+
+<ResponseField name="mensaje" type="string">
+  Human-readable confirmation that the product was permanently deleted.
+</ResponseField>
+
+<ResponseField name="producto" type="array">
+  Array containing the raw product row that was deleted, as returned by `RETURNING *`. Useful for logging or displaying a confirmation summary to the admin user.
+</ResponseField>
+
+## Error Cases
+
+| Status | Condition | Response body |
+|--------|-----------|---------------|
+| `400` | `id` path parameter is not a valid number | `{"mensaje": "El ID del producto debe ser un número válido"}` |
+| `404` | No product exists with the given `id` | `{"mensaje": "Producto no encontrado"}` |
+| `409` | The product is referenced by one or more `detalles_pedido` rows (PostgreSQL error `23503`) | `{"mensaje": "No se puede eliminar definitivamente porque el producto ya tiene ventas registradas. Te recomendamos desactivarlo."}` |
+| `500` | Unexpected database or server error | `{"mensaje": "Error al intentar eliminar"}` |
+
+<Note>
+  For products that have sales history, use `PATCH /api/v1/admin/productos/:id/desactivar` instead. Deactivating a product sets `activo = false`, hiding it from the public store and preventing new purchases, while preserving all order records and reporting data. See the [Activate / Deactivate](/api-reference/products/activate-deactivate) page for details.
+</Note>

@@ -1,0 +1,188 @@
+---
+title: "GET /api/v1/admin/productos — List All Products"
+sidebarTitle: "List Products"
+description: "GET /api/v1/admin/productos — Returns all products from the catalog view, including images, variants, stock totals, and color hex codes, ordered by most recent."
+---
+
+This endpoint queries the `vista_catalogo_productos` database view and returns every product in the catalog, ordered from newest to oldest by ID. Each object in the response array is a fully denormalized product record that includes the category name, the principal image URL, a summed stock total, a per-size stock breakdown, all hex color codes, the full image list with ordering, variant foreign-key ID arrays, and the complete variant matrix. No query parameters are required or supported.
+
+## Request
+
+**Method:** `GET`  
+**Path:** `/api/v1/admin/productos`  
+**Path parameters:** none  
+**Query parameters:** none  
+**Request body:** none
+
+```bash
+curl -X GET http://localhost:3000/api/v1/admin/productos \
+  -H "Accept: application/json"
+```
+
+## Response
+
+### 200 — Success
+
+Returns a JSON array of product objects. An empty catalog returns an empty array `[]`.
+
+```json
+[
+  {
+    "id": 9,
+    "nombre": "Hoodie Basic Gris Oscuro",
+    "descripcion": "Buzo con capucha gris carbón.",
+    "categoria_id": 1,
+    "categoria": "Hoodie",
+    "precio": "40000.00",
+    "destacado": true,
+    "activo": true,
+    "fecha_creacion": "2024-11-10T18:45:00.000Z",
+    "imagen_principal": "/recursos/imagenes/productos/Hoodie Basic Gris Oscuro.webp",
+    "stock_total": 13,
+    "stock_por_talle": [
+      { "talle": "L",  "cantidad": 8 },
+      { "talle": "XL", "cantidad": 5 }
+    ],
+    "colores_hex": ["#4A4A4A"],
+    "imagenes": [
+      { "url": "/recursos/imagenes/productos/Hoodie Basic Gris Oscuro.webp", "orden": 1 }
+    ],
+    "talle_ids": [3, 4],
+    "color_ids": [7],
+    "variantes": [
+      { "talle_id": 3, "color_id": 7, "stock": 8,  "activo": true },
+      { "talle_id": 4, "color_id": 7, "stock": 5,  "activo": true }
+    ]
+  },
+  {
+    "id": 1,
+    "nombre": "Hoodie Basic Blanco",
+    "descripcion": "Buzo con capucha blanco o hueso. Pequeño logo negro en el pecho.",
+    "categoria_id": 1,
+    "categoria": "Hoodie",
+    "precio": "40000.00",
+    "destacado": false,
+    "activo": true,
+    "fecha_creacion": "2024-11-01T10:00:00.000Z",
+    "imagen_principal": "/recursos/imagenes/productos/Hoodie Basic Blanco.webp",
+    "stock_total": 2,
+    "stock_por_talle": [
+      { "talle": "S", "cantidad": 2 }
+    ],
+    "colores_hex": ["#F5F5F5"],
+    "imagenes": [
+      { "url": "/recursos/imagenes/productos/Hoodie Basic Blanco.webp", "orden": 1 }
+    ],
+    "talle_ids": [1],
+    "color_ids": [1],
+    "variantes": [
+      { "talle_id": 1, "color_id": 1, "stock": 2, "activo": true }
+    ]
+  }
+]
+```
+
+### Response Fields
+
+<ResponseField name="id" type="integer">
+  Unique numeric identifier for the product, assigned by the database.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Display name of the product.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string | null">
+  Optional free-text description. `null` if not set.
+</ResponseField>
+
+<ResponseField name="categoria_id" type="integer">
+  Foreign key referencing the `categorias` table.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  Human-readable category name joined from the `categorias` table (e.g. `"Hoodie"`, `"Remera"`).
+</ResponseField>
+
+<ResponseField name="precio" type="string">
+  Product price in ARS as a decimal string with two places (e.g. `"40000.00"`).
+</ResponseField>
+
+<ResponseField name="destacado" type="boolean">
+  Whether the product is marked as featured and should appear in highlighted sections of the store.
+</ResponseField>
+
+<ResponseField name="activo" type="boolean">
+  Whether the product is visible to public store endpoints. `false` means the product is soft-deleted.
+</ResponseField>
+
+<ResponseField name="fecha_creacion" type="string">
+  ISO 8601 timestamp of when the product row was inserted.
+</ResponseField>
+
+<ResponseField name="imagen_principal" type="string | null">
+  Public URL of the image with the lowest `orden` value. `null` if no images have been attached.
+</ResponseField>
+
+<ResponseField name="stock_total" type="integer">
+  Sum of `stock` across all variants of this product.
+</ResponseField>
+
+<ResponseField name="stock_por_talle" type="array">
+  Aggregated stock per size. Each element has a `talle` (size label) and a `cantidad` (total units across all colors for that size).
+
+  <Expandable title="stock_por_talle item">
+    <ResponseField name="talle" type="string">
+      Size label (e.g. `"S"`, `"M"`, `"L"`, `"XL"`, `"XXL"`).
+    </ResponseField>
+    <ResponseField name="cantidad" type="integer">
+      Total units available for this size across all color variants.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="colores_hex" type="array">
+  Flat array of unique hex color codes for all variants of this product (e.g. `["#F5F5F5", "#1A1A1A"]`).
+</ResponseField>
+
+<ResponseField name="imagenes" type="array">
+  All product images ordered by `orden` ascending. Each element contains a `url` string and an `orden` integer.
+</ResponseField>
+
+<ResponseField name="talle_ids" type="array">
+  Sorted array of `talle_id` values that appear in at least one variant of this product.
+</ResponseField>
+
+<ResponseField name="color_ids" type="array">
+  Sorted array of `color_id` values that appear in at least one variant of this product.
+</ResponseField>
+
+<ResponseField name="variantes" type="array">
+  Full variant matrix. Each element contains `talle_id`, `color_id`, `stock`, and `activo`.
+
+  <Expandable title="variante item">
+    <ResponseField name="talle_id" type="integer">
+      Foreign key referencing the `talles` table.
+    </ResponseField>
+    <ResponseField name="color_id" type="integer">
+      Foreign key referencing the `colores` table.
+    </ResponseField>
+    <ResponseField name="stock" type="integer">
+      Units available for this specific size/color combination.
+    </ResponseField>
+    <ResponseField name="activo" type="boolean">
+      Whether this individual variant is available for purchase.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### 500 — Database Error
+
+Returned when the query against `vista_catalogo_productos` fails.
+
+```json
+{
+  "mensaje": "Error al obtener productos",
+  "detalle": "could not connect to server: Connection refused"
+}
+```
